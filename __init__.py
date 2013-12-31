@@ -9,7 +9,7 @@
 '''
 from trytond.pool import Pool
 from .transaction import PaymentGatewayAuthorize, \
-     AddPaymentProfileView, AddPaymentProfile, AuthorizeNetTransaction
+    AddPaymentProfileView, AddPaymentProfile, AuthorizeNetTransaction
 
 
 def register():

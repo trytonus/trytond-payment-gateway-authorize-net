@@ -93,4 +93,3 @@ setup(
     test_suite='tests',
     test_loader='trytond.test_loader:Loader',
 )
-

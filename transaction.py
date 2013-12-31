@@ -8,12 +8,11 @@
 
 '''
 from authorize import AuthorizeClient, CreditCard, Address, \
-     AuthorizeResponseError
+    AuthorizeResponseError
 from authorize.client import AuthorizeCreditCard
 from trytond.pool import PoolMeta, Pool
 from trytond.pyson import Eval
 from trytond.model import fields
-from trytond.exceptions import UserError
 
 __all__ = [
     'PaymentGatewayAuthorize', 'AddPaymentProfileView', 'AddPaymentProfile',
