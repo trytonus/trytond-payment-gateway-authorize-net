@@ -22,7 +22,7 @@ __metaclass__ = PoolMeta
 
 
 class PaymentGatewayAuthorize:
-    "Beanstream Gateway Implementation"
+    "Authorize.net Gateway Implementation"
     __name__ = 'payment_gateway.gateway'
 
     authorize_net_login = fields.Char(
@@ -52,7 +52,7 @@ class PaymentGatewayAuthorize:
     def get_methods(self):
         if self.provider == 'authorize_net':
             return [
-                ('credit_card_authorize_net', 'Credit Card - Authorize.net'),
+                ('credit_card', 'Credit Card - Authorize.net'),
             ]
         return super(PaymentGatewayAuthorize, self).get_methods()
 
@@ -178,7 +178,7 @@ class AuthorizeNetTransaction:
 
     def retry_authorize_net(self, credit_card=None):
         """
-        Authorize using beanstream for the specific transaction.
+        Authorize using Authorize.net for the specific transaction.
 
         :param credit_card: An instance of CreditCardView
         """
@@ -186,9 +186,32 @@ class AuthorizeNetTransaction:
 
     def update_authorize_net(self):
         """
-        Update the status of the transaction from beanstream
+        Update the status of the transaction from Authorize.net
         """
         raise self.raise_user_error('feature_not_available')
+
+    def cancel_authorize_net(self):
+        """
+        Cancel this authorization or request
+        """
+        TransactionLog = Pool().get('payment_gateway.transaction.log')
+
+        if self.state != 'authorized':
+            self.raise_user_error('cancel_only_authorized')
+
+        client = self.gateway.get_authorize_client()
+        client._transaction.base_params['x_currency_code'] = self.currency.code
+
+        auth_net_transaction = client.transaction(self.provider_reference)
+
+        # Try to void the transaction
+        result = auth_net_transaction.void()
+
+        # Mark the state as cancelled
+        self.state = 'cancel'
+        self.save()
+
+        TransactionLog.serialize_and_create(self, result.full_response)
 
 
 class AddPaymentProfileView:
