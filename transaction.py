@@ -260,6 +260,4 @@ class AddPaymentProfile:
             email=card_info.party.email
         )
         saved_card = saved_card.save()
-        self.create_profile(saved_card.uid)
-
-        return 'end'
+        return self.create_profile(saved_card.uid)
