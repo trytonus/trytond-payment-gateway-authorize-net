@@ -30,13 +30,15 @@ class TestViewsDepends(unittest.TestCase):
         Set up data used in the tests.
         this method is called before each test function execution.
         """
-        trytond.tests.test_tryton.install_module('payment_gateway_beanstream')
+        trytond.tests.test_tryton.install_module(
+            'payment_gateway_authorize_net'
+        )
 
     def test0005views(self):
         '''
         Test views.
         '''
-        test_view('payment_gateway_beanstream')
+        test_view('payment_gateway_authorize_net')
 
     def test0006depends(self):
         '''
