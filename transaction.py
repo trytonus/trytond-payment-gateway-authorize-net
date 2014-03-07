@@ -8,7 +8,7 @@
 
 '''
 from authorize import AuthorizeClient, CreditCard, Address, \
-    AuthorizeResponseError
+    AuthorizeResponseError, AuthorizeInvalidError
 from authorize.client import AuthorizeCreditCard
 from trytond.pool import PoolMeta, Pool
 from trytond.pyson import Eval
@@ -240,13 +240,16 @@ class AddPaymentProfile:
         card_info = self.card_info
 
         client = card_info.gateway.get_authorize_client()
-        cc = CreditCard(
-            card_info.number,
-            card_info.expiry_year,
-            card_info.expiry_month,
-            card_info.csc,
-            card_info.owner,
-        )
+        try:
+            cc = CreditCard(
+                card_info.number,
+                card_info.expiry_year,
+                card_info.expiry_month,
+                card_info.csc,
+                card_info.owner,
+            )
+        except AuthorizeInvalidError, e:
+            self.raise_user_error(unicode(e))
         address = Address(
             card_info.address.street,
             card_info.address.city,
