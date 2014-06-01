@@ -1,0 +1,5 @@
+[run]
+source = trytond.modules.payment_gateway_authorize_net
+
+[report]
+omit = */tests/*, */fabfile.py
