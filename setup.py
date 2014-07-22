@@ -4,19 +4,48 @@
 
     Payment Gateway Setup
 
-    :copyright: (c) 2013 by Openlabs Technologies & Consulting (P) Ltd.
+    :copyright: (c) 2013-2014 by Openlabs Technologies & Consulting (P) Ltd.
     :license: BSD, see LICENSE for more details
 
 '''
-
-from setuptools import setup
+import sys
 import re
 import os
+import unittest
 import ConfigParser
+from setuptools import setup, Command
 
 
 def read(fname):
     return open(os.path.join(os.path.dirname(__file__), fname)).read()
+
+
+class SQLiteTest(Command):
+    """
+    Run the tests on SQLite
+    """
+    description = "Run tests on SQLite"
+
+    user_options = []
+
+    def initialize_options(self):
+        pass
+
+    def finalize_options(self):
+        pass
+
+    def run(self):
+        from trytond.config import CONFIG
+        CONFIG['db_type'] = 'sqlite'
+        os.environ['DB_NAME'] = ':memory:'
+
+        from tests import suite
+        test_result = unittest.TextTestRunner(verbosity=3).run(suite())
+
+        if test_result.wasSuccessful():
+            sys.exit(0)
+        sys.exit(-1)
+
 
 config = ConfigParser.ConfigParser()
 config.readfp(open('tryton.cfg'))
@@ -92,4 +121,7 @@ setup(
     """ % (MODULE, MODULE),
     test_suite='tests',
     test_loader='trytond.test_loader:Loader',
+    cmdclass={
+        'test': SQLiteTest,
+    },
 )
