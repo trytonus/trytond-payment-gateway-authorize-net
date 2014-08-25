@@ -124,7 +124,7 @@ class AuthorizeNetTransaction:
 
         auth_net_transaction = client.transaction(self.provider_reference)
         try:
-            result = auth_net_transaction.settle()
+            result = auth_net_transaction.settle(self.amount)
         except AuthorizeResponseError, exc:
             self.state = 'failed'
             self.save()
