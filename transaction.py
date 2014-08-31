@@ -7,16 +7,16 @@
     :license: BSD, see LICENSE for more details
 
 '''
-from authorize import AuthorizeClient, CreditCard, Address, \
-    AuthorizeResponseError, AuthorizeInvalidError
-from authorize.client import AuthorizeCreditCard
+import authorize
+from authorize.exceptions import AuthorizeInvalidError, \
+    AuthorizeResponseError
 from trytond.pool import PoolMeta, Pool
 from trytond.pyson import Eval
 from trytond.model import fields
 
 __all__ = [
     'PaymentGatewayAuthorize', 'AddPaymentProfileView', 'AddPaymentProfile',
-    'AuthorizeNetTransaction',
+    'AuthorizeNetTransaction', 'Party', 'Address'
 ]
 __metaclass__ = PoolMeta
 
@@ -61,10 +61,10 @@ class PaymentGatewayAuthorize:
         Return an authenticated authorize.net client.
         """
         assert self.provider == 'authorize_net', 'Invalid provider'
-        return AuthorizeClient(
+        authorize.Configuration.configure(
+            authorize.Environment.TEST if self.test else authorize.Environment.PRODUCTION,  # noqa
             self.authorize_net_login,
             self.authorize_net_transaction_key,
-            test=self.test
         )
 
 
@@ -74,44 +74,80 @@ class AuthorizeNetTransaction:
     """
     __name__ = 'payment_gateway.transaction'
 
+    @classmethod
+    def __setup__(cls):
+        super(AuthorizeNetTransaction, cls).__setup__()
+
+        cls._error_messages.update({
+            'cancel_only_authorized': 'Only authorized transactions can be' + (
+                ' cancelled.'),
+        })
+
     def authorize_authorize_net(self, card_info=None):
         """
         Authorize using authorize.net for the specific transaction.
-
-        :param credit_card: An instance of CreditCardView
         """
         TransactionLog = Pool().get('payment_gateway.transaction.log')
 
-        client = self.gateway.get_authorize_client()
-        client._transaction.base_params['x_currency_code'] = self.currency.code
+        # Initialize authorize client
+        self.gateway.get_authorize_client()
 
+        auth_data = {
+            'amount': self.amount,
+        }
         if card_info:
-            cc = CreditCard(
-                card_info.number,
-                card_info.expiry_year,
-                card_info.expiry_month,
-                card_info.csc,
-                card_info.owner,
-            )
-            credit_card = client.card(cc)
+            billing_address = self.address.get_authorize_address(
+                card_info.owner)
+            shipping_address = {}
+            if self.shipping_address:
+                shipping_address = self.shipping_address.get_authorize_address(
+                    card_info.owner)
+
+            auth_data.update({
+                'email': self.party.email,
+                'credit_card': {
+                    'card_number': card_info.number,
+                    'card_code': str(card_info.csc),
+                    'expiration_date': "%s/%s" % (
+                        card_info.expiry_month, card_info.expiry_year
+                    ),
+                },
+                'billing': billing_address,
+                'shipping': shipping_address,
+            })
+
         elif self.payment_profile:
-            credit_card = client.saved_card(
-                self.payment_profile.provider_reference
-            )
+            if self.shipping_address:
+                if self.shipping_address.authorize_id:
+                    address_id = self.shipping_address.authorize_id
+                else:
+                    address_id = self.shipping_address.send_to_authorize(
+                        self.party.authorize_profile_id)
+            else:
+                if self.address.authorize_id:
+                    address_id = self.address.authorize_id
+                else:
+                    address_id = self.address.send_to_authorize(
+                        self.party.authorize_profile_id)
+            auth_data.update({
+                'customer_id': self.party.authorize_profile_id,
+                'payment_id': self.payment_profile.provider_reference,
+                'address_id': address_id,
+            })
         else:
             self.raise_user_error('no_card_or_profile')
 
         try:
-            result = credit_card.auth(self.amount)
+            result = authorize.Transaction.auth(auth_data)
         except AuthorizeResponseError, exc:
             self.state = 'failed'
             self.save()
             TransactionLog.serialize_and_create(self, exc.full_response)
         else:
             self.state = 'authorized'
-            self.provider_reference = str(result.uid)
+            self.provider_reference = str(result.transaction_response.trans_id)
             self.save()
-            TransactionLog.serialize_and_create(self, result.full_response)
+            TransactionLog.serialize_and_create(self, result)
 
     def settle_authorize_net(self):
         """
@@ -119,64 +155,92 @@ class AuthorizeNetTransaction:
         """
         TransactionLog = Pool().get('payment_gateway.transaction.log')
 
-        client = self.gateway.get_authorize_client()
-        client._transaction.base_params['x_currency_code'] = self.currency.code
+        # Initialize authorize.net client
+        self.gateway.get_authorize_client()
 
-        auth_net_transaction = client.transaction(self.provider_reference)
         try:
-            result = auth_net_transaction.settle(self.amount)
+            result = authorize.Transaction.settle(
+                self.provider_reference, self.amount
+            )
         except AuthorizeResponseError, exc:
             self.state = 'failed'
             self.save()
             TransactionLog.serialize_and_create(self, exc.full_response)
         else:
             self.state = 'completed'
-            self.provider_reference = str(result.uid)
+            self.provider_reference = str(result.transaction_response.trans_id)
             self.save()
-            TransactionLog.serialize_and_create(self, result.full_response)
+            TransactionLog.serialize_and_create(self, result)
             self.safe_post()
 
     def capture_authorize_net(self, card_info=None):
         """
         Capture using authorize.net for the specific transaction.
-
-        :param card_info: An instance of CreditCardView
         """
         TransactionLog = Pool().get('payment_gateway.transaction.log')
 
-        client = self.gateway.get_authorize_client()
-        client._transaction.base_params['x_currency_code'] = self.currency.code
+        # Initialize authorize client
+        self.gateway.get_authorize_client()
 
+        capture_data = {
+            'amount': self.amount,
+        }
         if card_info:
-            cc = CreditCard(
-                card_info.number,
-                card_info.expiry_year,
-                card_info.expiry_month,
-                card_info.csc,
-                card_info.owner,
-            )
-            credit_card = client.card(cc)
+            billing_address = self.address.get_authorize_address(
+                card_info.owner)
+            shipping_address = {}
+            if self.shipping_address:
+                shipping_address = self.shipping_address.get_authorize_address(
+                    card_info.owner)
+
+            capture_data.update({
+                'email': self.party.email,
+                'credit_card': {
+                    'card_number': card_info.number,
+                    'card_code': str(card_info.csc),
+                    'expiration_date': "%s/%s" % (
+                        card_info.expiry_month, card_info.expiry_year
+                    ),
+                },
+                'billing': billing_address,
+                'shipping': shipping_address,
+            })
+
         elif self.payment_profile:
-            credit_card = client.saved_card(
-                self.payment_profile.provider_reference
-            )
+            if self.shipping_address:
+                if self.shipping_address.authorize_id:
+                    address_id = self.shipping_address.authorize_id
+                else:
+                    address_id = self.shipping_address.send_to_authorize(
+                        self.party.authorize_profile_id)
+            else:
+                if self.address.authorize_id:
+                    address_id = self.address.authorize_id
+                else:
+                    address_id = self.address.send_to_authorize(
+                        self.party.authorize_profile_id)
+            capture_data.update({
+                'customer_id': self.party.authorize_profile_id,
+                'payment_id': self.payment_profile.provider_reference,
+                'address_id': address_id,
+            })
         else:
             self.raise_user_error('no_card_or_profile')
 
         try:
-            result = credit_card.capture(self.amount)
+            result = authorize.Transaction.sale(capture_data)
         except AuthorizeResponseError, exc:
             self.state = 'failed'
             self.save()
             TransactionLog.serialize_and_create(self, exc.full_response)
         else:
             self.state = 'completed'
-            self.provider_reference = str(result.uid)
+            self.provider_reference = str(result.transaction_response.trans_id)
             self.save()
-            TransactionLog.serialize_and_create(self, result.full_response)
+            TransactionLog.serialize_and_create(self, result)
             self.safe_post()
 
-    def retry_authorize_net(self, credit_card=None):
+    def retry_authorize_net(self, credit_card=None):  # pragma: no cover
         """
         Authorize using Authorize.net for the specific transaction.
 
@@ -184,7 +248,7 @@ class AuthorizeNetTransaction:
         """
         raise self.raise_user_error('feature_not_available')
 
-    def update_authorize_net(self):
+    def update_authorize_net(self):  # pragma: no cover
         """
         Update the status of the transaction from Authorize.net
         """
@@ -199,19 +263,18 @@ class AuthorizeNetTransaction:
         if self.state != 'authorized':
             self.raise_user_error('cancel_only_authorized')
 
-        client = self.gateway.get_authorize_client()
-        client._transaction.base_params['x_currency_code'] = self.currency.code
-
-        auth_net_transaction = client.transaction(self.provider_reference)
+        # Initialize authurize.net client
+        self.gateway.get_authorize_client()
 
         # Try to void the transaction
-        result = auth_net_transaction.void()
-
-        # Mark the state as cancelled
-        self.state = 'cancel'
-        self.save()
-
-        TransactionLog.serialize_and_create(self, result.full_response)
+        try:
+            result = authorize.Transaction.void(self.provider_reference)
+        except AuthorizeResponseError, exc:
+            TransactionLog.serialize_and_create(self, exc.full_response)
+        else:
+            self.state = 'cancel'
+            self.save()
+            TransactionLog.serialize_and_create(self, result)
 
 
 class AddPaymentProfileView:
@@ -237,30 +300,98 @@ class AddPaymentProfile:
         """
         Handle the case if the profile should be added for authorize.net
         """
+        Party = Pool().get('party.party')
+
         card_info = self.card_info
 
-        client = card_info.gateway.get_authorize_client()
+        # Initialize authorize.net client
+        card_info.gateway.get_authorize_client()
+
+        customer_data = {}
+
+        # Create new customer profile if no old profile is there
+        if not card_info.party.authorize_profile_id:
+            customer_data = {
+                'description': card_info.party.name,
+                'email': card_info.party.email,
+            }
+            try:
+                customer = authorize.Customer.create(customer_data)
+            except AuthorizeInvalidError, exc:
+                self.raise_user_error(unicode(exc))
+
+            # Write customer profile ID in party
+            Party.write([card_info.party], {
+                'authorize_profile_id': customer.customer_id
+            })
+
+        # Now create new credit card and associate it with the above
+        # created customer
+        credit_card_data = {
+            'card_number': card_info.number,
+            'card_code': str(card_info.csc),
+            'expiration_month': card_info.expiry_month,
+            'expiration_year': card_info.expiry_year,
+            'billing': card_info.address.get_authorize_address(card_info.owner)
+        }
         try:
-            cc = CreditCard(
-                card_info.number,
-                card_info.expiry_year,
-                card_info.expiry_month,
-                card_info.csc,
-                card_info.owner,
+            credit_card = authorize.CreditCard.create(
+                card_info.party.authorize_profile_id, credit_card_data
             )
-        except AuthorizeInvalidError, e:
-            self.raise_user_error(unicode(e))
-        address = Address(
-            card_info.address.street,
-            card_info.address.city,
-            card_info.address.zip,
-            card_info.address.country.code,
-        )
-        saved_card = AuthorizeCreditCard(
-            client,
-            credit_card=cc,
-            address=address,
-            email=card_info.party.email
-        )
-        saved_card = saved_card.save()
-        return self.create_profile(saved_card.uid)
+        except AuthorizeInvalidError, exc:
+            self.raise_user_error(unicode(exc))
+        return self.create_profile(credit_card.payment_id)
+
+
+class Party:
+    __name__ = 'party.party'
+
+    authorize_profile_id = fields.Char(
+        'Authorize.net Profile ID', readonly=True
+    )
+
+
+class Address:
+    __name__ = 'party.address'
+
+    authorize_id = fields.Char(
+        'Authorize.net ID', readonly=True
+    )
+
+    def send_to_authorize(self, profile_id):
+        """
+        Helpler method which creates a new address record on
+        authorize.net servers and returns it's ID.
+
+        :param profile_id: The profile_id of customer profile for
+            which you want to create address. Required if create=True
+        """
+        Address = Pool().get('party.address')
+
+        address = authorize.Address.create(
+            profile_id, self.get_authorize_address())
+        address_id = address.address_id
+        Address.write([self], {
+            'authorize_id': address_id,
+        })
+        return address_id
+
+    def get_authorize_address(self, name=None):
+        """
+        Returns address as a dictionary to send to authorize.net
+
+        :param name: Name to send as first name in address.
+            Default is party's name.
+        """
+        return {
+            'first_name': name if name else self.party.name,
+            'last_name': '',
+            'company': '',
+            'address': '\n'.join(filter(None, [self.street, self.streetbis])),
+            'city': self.city,
+            'state': self.subdivision and self.subdivision.code,
+            'zip': self.zip,
+            'country': self.country and self.country.code,
+            'phone_number': self.party.phone,
+            'fax_number': self.party.fax,
+        }
