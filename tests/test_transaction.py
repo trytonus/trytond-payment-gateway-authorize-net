@@ -230,7 +230,7 @@ class TestTransaction(unittest.TestCase):
             last_4_digits='1111',
             expiry_month='01',
             expiry_year='2018',
-            provider_reference='25912993',
+            provider_reference='26037832',
         )
         self.payment_profile.save()
 
@@ -262,7 +262,6 @@ class TestTransaction(unittest.TestCase):
 
             with Transaction().set_context(return_profile=True):
                 profile = profile_wizard.transition_add()
-            return profile
 
             self.assertEqual(profile.party.id, self.party2.id)
             self.assertEqual(profile.gateway, self.auth_net_gateway)
@@ -275,9 +274,7 @@ class TestTransaction(unittest.TestCase):
             self.assertEqual(
                 profile.expiry_year, self.card_data1['expiry_year']
             )
-            self.assertEqual(
-                profile.authorize_profile_id, self.party2.authorize_profile_id
-            )
+            self.assertIsNotNone(self.party2.authorize_profile_id)
 
     def test_0020_test_transaction_capture(self):
         """

@@ -95,6 +95,13 @@ class AuthorizeNetTransaction:
         auth_data = {
             'amount': self.amount,
         }
+        if hasattr(self, 'sale'):
+            auth_data.update({
+                'order': {
+                    'invoice_number': self.sale.reference or '',
+                    'description': self.sale.description or '',
+                },
+            })
         if card_info:
             billing_address = self.address.get_authorize_address(
                 card_info.owner)
@@ -185,6 +192,13 @@ class AuthorizeNetTransaction:
         capture_data = {
             'amount': self.amount,
         }
+        if hasattr(self, 'sale'):
+            capture_data.update({
+                'order': {
+                    'invoice_number': self.sale.reference or '',
+                    'description': self.sale.description or '',
+                },
+            })
         if card_info:
             billing_address = self.address.get_authorize_address(
                 card_info.owner)
