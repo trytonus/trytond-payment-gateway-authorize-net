@@ -95,7 +95,7 @@ class AuthorizeNetTransaction:
         auth_data = {
             'amount': self.amount,
         }
-        if hasattr(self, 'sale'):
+        if hasattr(self, 'sale') and self.sale:
             auth_data.update({
                 'order': {
                     'invoice_number': self.sale.reference or '',
@@ -192,7 +192,7 @@ class AuthorizeNetTransaction:
         capture_data = {
             'amount': self.amount,
         }
-        if hasattr(self, 'sale'):
+        if hasattr(self, 'sale') and self.sale:
             capture_data.update({
                 'order': {
                     'invoice_number': self.sale.reference or '',
