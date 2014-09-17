@@ -314,30 +314,16 @@ class AddPaymentProfile:
         """
         Handle the case if the profile should be added for authorize.net
         """
-        Party = Pool().get('party.party')
-
         card_info = self.card_info
 
         # Initialize authorize.net client
         card_info.gateway.get_authorize_client()
 
-        customer_data = {}
-
         # Create new customer profile if no old profile is there
         if not card_info.party.authorize_profile_id:
-            customer_data = {
-                'description': card_info.party.name,
-                'email': card_info.party.email,
-            }
-            try:
-                customer = authorize.Customer.create(customer_data)
-            except AuthorizeInvalidError, exc:
-                self.raise_user_error(unicode(exc))
-
-            # Write customer profile ID in party
-            Party.write([card_info.party], {
-                'authorize_profile_id': customer.customer_id
-            })
+            customer_id = self.create_auth_customer_profile()
+        else:
+            customer_id = card_info.party.authorize_profile_id
 
         # Now create new credit card and associate it with the above
         # created customer
@@ -348,13 +334,60 @@ class AddPaymentProfile:
             'expiration_year': card_info.expiry_year,
             'billing': card_info.address.get_authorize_address(card_info.owner)
         }
+        for try_count in range(2):
+            try:
+                credit_card = authorize.CreditCard.create(
+                    customer_id, credit_card_data
+                )
+                break
+            except AuthorizeInvalidError, exc:
+                self.raise_user_error(unicode(exc))
+            except AuthorizeResponseError, exc:
+                if try_count == 0 and 'E00039' in unicode(exc):
+                    # Delete all unused payment profiles on authorize.net
+                    customer_details = authorize.Customer.details(customer_id)
+                    auth_payment_ids = set([
+                        p.payment_id for p in customer_details.profile.payments
+                    ])
+                    if card_info.party.payment_profiles:
+                        local_payment_ids = set([
+                            p.provider_reference for p in card_info.party.payment_profiles  # noqa
+                        ])
+                        ids_to_delete = auth_payment_ids.difference(
+                            local_payment_ids
+                        )
+                    else:
+                        ids_to_delete = auth_payment_ids
+
+                    if ids_to_delete:
+                        for payment_id in ids_to_delete:
+                            authorize.CreditCard.delete(customer_id, payment_id)
+                    continue
+                self.raise_user_error(unicode(exc.message))
+
+        return self.create_profile(credit_card.payment_id)
+
+    def create_auth_customer_profile(self):
+        """
+        Creates a customer profile on authorize.net and returns
+        created profile's ID
+        """
+        Party = Pool().get('party.party')
+
+        customer_party = self.card_info.party
         try:
-            credit_card = authorize.CreditCard.create(
-                card_info.party.authorize_profile_id, credit_card_data
-            )
+            customer = authorize.Customer.create({
+                'description': customer_party.name,
+                'email': customer_party.email,
+            })
         except AuthorizeInvalidError, exc:
             self.raise_user_error(unicode(exc))
-        return self.create_profile(credit_card.payment_id)
+
+        # Write customer profile ID in party
+        Party.write([customer_party], {
+            'authorize_profile_id': customer.customer_id
+        })
+        return customer.customer_id
 
 
 class Party:
@@ -382,9 +415,26 @@ class Address:
         """
         Address = Pool().get('party.address')
 
-        address = authorize.Address.create(
-            profile_id, self.get_authorize_address())
+        for try_count in range(2):
+            try:
+                address = authorize.Address.create(
+                    profile_id, self.get_authorize_address()
+                )
+                break
+            except AuthorizeResponseError, exc:
+                if try_count == 0 and 'E00039' in unicode(exc):
+                    # Delete all addresses on authorize.net
+                    customer_details = authorize.Customer.details(profile_id)
+                    address_ids = [
+                        a.address_id for a in customer_details.profile.addresses
+                    ]
+                    for address_id in address_ids:
+                        authorize.Address.delete(profile_id, address_id)
+                    continue
+                self.raise_user_error(unicode(exc.message))
+
         address_id = address.address_id
+
         Address.write([self], {
             'authorize_id': address_id,
         })
