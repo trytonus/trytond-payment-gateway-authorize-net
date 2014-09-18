@@ -424,12 +424,7 @@ class Address:
             except AuthorizeResponseError, exc:
                 if try_count == 0 and 'E00039' in unicode(exc):
                     # Delete all addresses on authorize.net
-                    customer_details = authorize.Customer.details(profile_id)
-                    address_ids = [
-                        a.address_id for a in customer_details.profile.addresses
-                    ]
-                    for address_id in address_ids:
-                        authorize.Address.delete(profile_id, address_id)
+                    self.delete_authorize_addresses(profile_id)
                     continue
                 self.raise_user_error(unicode(exc.message))
             except AuthorizeInvalidError, exc:
@@ -461,3 +456,21 @@ class Address:
             'phone_number': self.party.phone,
             'fax_number': self.party.fax,
         }
+
+    def delete_authorize_addresses(self, profile_id):
+        """
+        Delete all shipping addresses for customer on authorize.net
+        """
+        Address = Pool().get('party.address')
+
+        customer_details = authorize.Customer.details(profile_id)
+        address_ids = [
+            a.address_id for a in customer_details.profile.addresses
+        ]
+        for address_id in address_ids:
+            authorize.Address.delete(profile_id, address_id)
+
+        # Set authorize_id none for all party addresses
+        Address.write(list(self.party.addresses), {
+            'authorize_id': None,
+        })
