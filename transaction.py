@@ -432,6 +432,8 @@ class Address:
                         authorize.Address.delete(profile_id, address_id)
                     continue
                 self.raise_user_error(unicode(exc.message))
+            except AuthorizeInvalidError, exc:
+                self.raise_user_error(unicode(exc))
 
         address_id = address.address_id
 
@@ -448,7 +450,7 @@ class Address:
             Default is party's name.
         """
         return {
-            'first_name': name if name else self.party.name,
+            'first_name': name or self.name or self.party.name,
             'last_name': '',
             'company': '',
             'address': '\n'.join(filter(None, [self.street, self.streetbis])),
