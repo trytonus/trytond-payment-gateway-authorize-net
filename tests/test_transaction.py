@@ -506,8 +506,7 @@ class TestTransaction(unittest.TestCase):
             authorize.CreditCard.create(customer.customer_id, {
                 'card_number': '4111111111111111',
                 'card_code': '523',
-                'expiration_month': '5',
-                'expiration_year': '2015',
+                'expiration_date': '05/2023',
                 'billing': self.party2.addresses[0].get_authorize_address(
                     'Test User'
                 ),
@@ -528,7 +527,7 @@ class TestTransaction(unittest.TestCase):
             profile_wizard.card_info.owner = 'Test User'
             profile_wizard.card_info.number = '4111111111111111'
             profile_wizard.card_info.expiry_month = '05'
-            profile_wizard.card_info.expiry_year = '2015'
+            profile_wizard.card_info.expiry_year = '2023'
             profile_wizard.card_info.csc = '523'
             profile_wizard.card_info.gateway = self.auth_net_gateway
             profile_wizard.card_info.provider = self.auth_net_gateway.provider
@@ -547,7 +546,7 @@ class TestTransaction(unittest.TestCase):
                 profile.expiry_month, '05'
             )
             self.assertEqual(
-                profile.expiry_year, '2015'
+                profile.expiry_year, '2023'
             )
             self.assertIsNotNone(self.party2.authorize_profile_id)
 

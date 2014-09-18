@@ -330,8 +330,9 @@ class AddPaymentProfile:
         credit_card_data = {
             'card_number': card_info.number,
             'card_code': str(card_info.csc),
-            'expiration_month': card_info.expiry_month,
-            'expiration_year': card_info.expiry_year,
+            'expiration_date': "%s/%s" % (
+                card_info.expiry_month, card_info.expiry_year
+            ),
             'billing': card_info.address.get_authorize_address(card_info.owner)
         }
         for try_count in range(2):
