@@ -340,6 +340,14 @@ class AddPaymentProfile:
                 credit_card = authorize.CreditCard.create(
                     customer_id, credit_card_data
                 )
+                # Validate newly created credit card
+                authorize.CreditCard.validate(
+                    customer_id, credit_card.payment_id, {
+                        'card_code': credit_card_data['card_code'],
+                        'validationMode': 'testMode' if card_info.gateway.test
+                        else 'liveMode'
+                    }
+                )
                 break
             except AuthorizeInvalidError, exc:
                 self.raise_user_error(unicode(exc))
