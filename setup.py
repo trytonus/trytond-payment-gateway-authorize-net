@@ -58,7 +58,7 @@ major_version = int(major_version)
 minor_version = int(minor_version)
 
 requires = [
-    'AuthorizeSauce',
+    'py-authorize',
 ]
 
 MODULE = 'payment_gateway_authorize_net'
