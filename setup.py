@@ -59,6 +59,7 @@ minor_version = int(minor_version)
 
 requires = [
     'py-authorize',
+    'openlabs_payment_gateway>=3.2.1.0,<3.3',
 ]
 
 MODULE = 'payment_gateway_authorize_net'
