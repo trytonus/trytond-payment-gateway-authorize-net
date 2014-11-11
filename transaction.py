@@ -29,13 +29,15 @@ class PaymentGatewayAuthorize:
         'API Login', states={
             'required': Eval('provider') == 'authorize_net',
             'invisible': Eval('provider') != 'authorize_net',
-        }, depends=['provider']
+            'readonly': ~Eval('active', True),
+        }, depends=['provider', 'active']
     )
     authorize_net_transaction_key = fields.Char(
         'Transaction Key', states={
             'required': Eval('provider') == 'authorize_net',
             'invisible': Eval('provider') != 'authorize_net',
-        }, depends=['provider']
+            'readonly': ~Eval('active', True),
+        }, depends=['provider', 'active']
     )
 
     @classmethod
