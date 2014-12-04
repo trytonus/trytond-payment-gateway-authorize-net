@@ -13,10 +13,12 @@ from authorize.exceptions import AuthorizeInvalidError, \
 from trytond.pool import PoolMeta, Pool
 from trytond.pyson import Eval
 from trytond.model import fields
+from trytond import backend
+from trytond.transaction import Transaction
 
 __all__ = [
     'PaymentGatewayAuthorize', 'AddPaymentProfileView', 'AddPaymentProfile',
-    'AuthorizeNetTransaction', 'Party', 'Address'
+    'AuthorizeNetTransaction', 'Party', 'Address', 'PaymentProfile'
 ]
 __metaclass__ = PoolMeta
 
@@ -131,15 +133,15 @@ class AuthorizeNetTransaction:
                     address_id = self.shipping_address.authorize_id
                 else:
                     address_id = self.shipping_address.send_to_authorize(
-                        self.party.authorize_profile_id)
+                        self.payment_profile.authorize_profile_id)
             else:
                 if self.address.authorize_id:
                     address_id = self.address.authorize_id
                 else:
                     address_id = self.address.send_to_authorize(
-                        self.party.authorize_profile_id)
+                        self.payment_profile.authorize_profile_id)
             auth_data.update({
-                'customer_id': self.party.authorize_profile_id,
+                'customer_id': self.payment_profile.authorize_profile_id,
                 'payment_id': self.payment_profile.provider_reference,
                 'address_id': address_id,
             })
@@ -228,15 +230,15 @@ class AuthorizeNetTransaction:
                     address_id = self.shipping_address.authorize_id
                 else:
                     address_id = self.shipping_address.send_to_authorize(
-                        self.party.authorize_profile_id)
+                        self.payment_profile.authorize_profile_id)
             else:
                 if self.address.authorize_id:
                     address_id = self.address.authorize_id
                 else:
                     address_id = self.address.send_to_authorize(
-                        self.party.authorize_profile_id)
+                        self.payment_profile.authorize_profile_id)
             capture_data.update({
-                'customer_id': self.party.authorize_profile_id,
+                'customer_id': self.payment_profile.authorize_profile_id,
                 'payment_id': self.payment_profile.provider_reference,
                 'address_id': address_id,
             })
@@ -321,11 +323,12 @@ class AddPaymentProfile:
         # Initialize authorize.net client
         card_info.gateway.get_authorize_client()
 
+        customer_id = card_info.party._get_authorize_net_customer_id(
+            card_info.gateway.id
+        )
         # Create new customer profile if no old profile is there
-        if not card_info.party.authorize_profile_id:
+        if not customer_id:
             customer_id = self.create_auth_customer_profile()
-        else:
-            customer_id = card_info.party.authorize_profile_id
 
         # Now create new credit card and associate it with the above
         # created customer
@@ -376,15 +379,16 @@ class AddPaymentProfile:
                     continue
                 self.raise_user_error(unicode(exc.message))
 
-        return self.create_profile(credit_card.payment_id)
+        return self.create_profile(
+            credit_card.payment_id,
+            authorize_profile_id=customer_id
+        )
 
     def create_auth_customer_profile(self):
         """
         Creates a customer profile on authorize.net and returns
         created profile's ID
         """
-        Party = Pool().get('party.party')
-
         customer_party = self.card_info.party
         try:
             customer = authorize.Customer.create({
@@ -394,19 +398,55 @@ class AddPaymentProfile:
         except AuthorizeInvalidError, exc:
             self.raise_user_error(unicode(exc))
 
-        # Write customer profile ID in party
-        Party.write([customer_party], {
-            'authorize_profile_id': customer.customer_id
-        })
         return customer.customer_id
 
 
 class Party:
     __name__ = 'party.party'
 
-    authorize_profile_id = fields.Char(
-        'Authorize.net Profile ID', readonly=True
-    )
+    @classmethod
+    def __register__(cls, module_name):
+        super(Party, cls).__register__(module_name)
+
+        PaymentProfile = Pool().get('party.payment_profile')
+
+        TableHandler = backend.get('TableHandler')
+        cursor = Transaction().cursor
+        table = TableHandler(cursor, cls, module_name)
+        party = cls.__table__()
+        payment_profile = PaymentProfile.__table__()
+
+        # Migration
+        # Move the content of authorize_profile_id from party to
+        # payment profiles and drop authorize_profile_id from party table
+        if table.column_exist('authorize_profile_id'):
+            update = payment_profile.update(
+                columns=[payment_profile.authorize_profile_id],
+                values=[party.authorize_profile_id],
+                from_=[party],
+                where=(payment_profile.party == party.id)
+            )
+            cursor.execute(*update)
+
+            table.drop_column('authorize_profile_id')
+
+    def _get_authorize_net_customer_id(self, gateway_id):
+        """
+        Extracts and returns customer id from party's payment profile
+        Return None if no customer id is found.
+
+        :param gateway_id: The gateway ID to which the customer id is associated
+        """
+        PaymentProfile = Pool().get('party.payment_profile')
+
+        payment_profiles = PaymentProfile.search([
+            ('party', '=', self.id),
+            ('authorize_profile_id', '!=', None),
+            ('gateway', '=', gateway_id),
+        ])
+        if payment_profiles:
+            return payment_profiles[0].authorize_profile_id
+        return None
 
 
 class Address:
@@ -485,3 +525,11 @@ class Address:
         Address.write(list(self.party.addresses), {
             'authorize_id': None,
         })
+
+
+class PaymentProfile:
+    __name__ = 'party.payment_profile'
+
+    authorize_profile_id = fields.Char(
+        'Authorize.net Profile ID', readonly=True
+    )

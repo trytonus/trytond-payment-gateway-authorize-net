@@ -179,7 +179,6 @@ class TestTransaction(unittest.TestCase):
             }])],
             'account_receivable': self._get_account_by_kind(
                 'receivable').id,
-            'authorize_profile_id': '28545177',
         }])
         self.party2, = self.Party.create([{
             'name': 'Test party - 2',
@@ -231,7 +230,8 @@ class TestTransaction(unittest.TestCase):
             last_4_digits='1111',
             expiry_month='01',
             expiry_year='2018',
-            provider_reference='26037832',
+            provider_reference='27527167',
+            authorize_profile_id='28545177',
         )
         self.payment_profile.save()
 
@@ -275,7 +275,7 @@ class TestTransaction(unittest.TestCase):
             self.assertEqual(
                 profile.expiry_year, self.card_data1['expiry_year']
             )
-            self.assertIsNotNone(self.party2.authorize_profile_id)
+            self.assertIsNotNone(profile.authorize_profile_id)
 
     def test_0020_test_transaction_capture(self):
         """
@@ -497,8 +497,6 @@ class TestTransaction(unittest.TestCase):
         Test that workflow is not effected if duplicate payment profile
         is there on authorize.net
         """
-        Party = POOL.get('party.party')
-
         with Transaction().start(DB_NAME, USER, context=CONTEXT):
             self.setup_defaults()
 
@@ -512,9 +510,18 @@ class TestTransaction(unittest.TestCase):
                 ),
             })
 
-            Party.write([self.party2], {
-                'authorize_profile_id': customer.customer_id,
-            })
+            # Create a payment profile with some random payment id
+            payment_profile = self.PaymentProfile(
+                party=self.party2,
+                address=self.party2.addresses[0].id,
+                gateway=self.auth_net_gateway.id,
+                last_4_digits='1111',
+                expiry_month='05',
+                expiry_year='2023',
+                provider_reference='67382920',
+                authorize_profile_id=customer.customer_id,
+            )
+            payment_profile.save()
 
             # Create payment profile with same details as above
             ProfileWizard = POOL.get(
@@ -548,30 +555,29 @@ class TestTransaction(unittest.TestCase):
             self.assertEqual(
                 profile.expiry_year, '2023'
             )
-            self.assertIsNotNone(self.party2.authorize_profile_id)
+            self.assertIsNotNone(profile.authorize_profile_id)
+            self.assertEqual(
+                profile.authorize_profile_id,
+                payment_profile.authorize_profile_id
+            )
 
     def test_0070_test_duplicate_shipping_address(self):
         """
         Test that workflow is not effected if duplicate shipping address
         is sent.
         """
-        Party = POOL.get('party.party')
-
         with Transaction().start(DB_NAME, USER, context=CONTEXT):
             self.setup_defaults()
 
             customer = authorize.Customer.create()
             authorize.Address.create(
                 customer.customer_id,
-                self.party2.addresses[0].get_authorize_address()
+                self.party1.addresses[0].get_authorize_address()
             )
-            Party.write([self.party2], {
-                'authorize_profile_id': customer.customer_id,
-            })
 
             # Try creating shipping address with same address
             new_address_id = self.party2.addresses[0].send_to_authorize(
-                self.party2.authorize_profile_id
+                customer.customer_id
             )
             self.assert_(new_address_id)
 
