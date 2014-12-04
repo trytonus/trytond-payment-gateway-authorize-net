@@ -11,5 +11,10 @@
             <field name="inherit" ref="party.party_view_form"/>
             <field name="name">party_form</field>
         </record>
+        <record model="ir.ui.view" id="payment_profile_view_form">
+            <field name="model">party.payment_profile</field>
+            <field name="inherit" ref="payment_gateway.payment_profile_view_form"/>
+            <field name="name">payment_profile_form</field>
+        </record>
    </data>
 </tryton>

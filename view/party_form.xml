@@ -3,8 +3,6 @@
         <page string="Payment Profiles" id="payment_profiles">
             <label name="default_payment_profile"/>
             <field name="default_payment_profile"/>
-            <label name="authorize_profile_id"/>
-            <field name="authorize_profile_id"/>
             <button name="add_payment_profile" colspan="4"
                 string="Add payment profile"/>
             <field name="payment_profiles" colspan="4"/>
