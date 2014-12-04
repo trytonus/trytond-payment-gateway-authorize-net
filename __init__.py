@@ -10,7 +10,7 @@
 from trytond.pool import Pool
 from .transaction import PaymentGatewayAuthorize, \
     AddPaymentProfileView, AddPaymentProfile, AuthorizeNetTransaction, \
-    Party, Address
+    Party, Address, PaymentProfile
 
 
 def register():
@@ -18,6 +18,7 @@ def register():
         PaymentGatewayAuthorize,
         AddPaymentProfileView,
         AuthorizeNetTransaction,
+        PaymentProfile,
         Party,
         Address,
         module='payment_gateway_authorize_net', type_='model'

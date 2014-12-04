@@ -1,0 +1,6 @@
+<data>
+    <xpath expr="/form/label[@name='provider_reference']" position="before">
+        <label name="authorize_profile_id"/>
+        <field name="authorize_profile_id"/>
+    </xpath>
+</data>
