@@ -1,0 +1,35 @@
+# 
+msgid ""
+msgstr "Content-Type: text/plain; charset=utf-8\n"
+
+msgctxt "error:payment_gateway.transaction:"
+msgid "Only authorized transactions can be cancelled."
+msgstr "Nur autorisierte Transaktionen können annulliert werden"
+
+msgctxt "field:party.address,authorize_id:"
+msgid "Authorize.net ID"
+msgstr "Authorize.net ID"
+
+msgctxt "field:party.payment_profile,authorize_profile_id:"
+msgid "Authorize.net Profile ID"
+msgstr "Authorize.net Profil ID"
+
+msgctxt "field:payment_gateway.gateway,authorize_net_login:"
+msgid "API Login"
+msgstr "API Login"
+
+msgctxt "field:payment_gateway.gateway,authorize_net_transaction_key:"
+msgid "Transaction Key"
+msgstr "Transaktionsschlüssel"
+
+msgctxt "view:party.party:"
+msgid "Add payment profile"
+msgstr "Zahlungsprofil hinzufügen"
+
+msgctxt "view:party.party:"
+msgid "Payment Profiles"
+msgstr "Zahlungsprofile"
+
+msgctxt "view:payment_gateway.gateway:"
+msgid "Authorize.net Settings"
+msgstr "Authorize.net Einstellungen"
