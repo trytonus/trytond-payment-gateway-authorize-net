@@ -8,7 +8,7 @@ this repository contains the full copyright notices and license terms. -->
             <label name="authorize_net_login"/>
             <field name="authorize_net_login"/>
             <label name="authorize_net_transaction_key"/>
-            <field name="authorize_net_transaction_key"/>
+            <field name="authorize_net_transaction_key" widget="password"/>
         </page>
     </xpath>
 </data>
