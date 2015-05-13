@@ -342,6 +342,10 @@ class TestTransaction(unittest.TestCase):
                 }])
                 self.assert_(transaction4)
                 self.assertEqual(transaction4.state, 'draft')
+                self.assertEqual(
+                    transaction4.get_authorize_net_request_data(),
+                    {'amount': transaction4.amount}
+                )
 
                 # Capture transaction
                 with self.assertRaises(UserError):
