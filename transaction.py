@@ -96,16 +96,7 @@ class AuthorizeNetTransaction:
         # Initialize authorize client
         self.gateway.get_authorize_client()
 
-        auth_data = {
-            'amount': self.amount,
-        }
-        if hasattr(self, 'sale') and self.sale:
-            auth_data.update({
-                'order': {
-                    'invoice_number': self.sale.reference or '',
-                    'description': self.sale.description or '',
-                },
-            })
+        auth_data = self.get_authorize_net_request_data()
         if card_info:
             billing_address = self.address.get_authorize_address(
                 card_info.owner)
@@ -193,16 +184,7 @@ class AuthorizeNetTransaction:
         # Initialize authorize client
         self.gateway.get_authorize_client()
 
-        capture_data = {
-            'amount': self.amount,
-        }
-        if hasattr(self, 'sale') and self.sale:
-            capture_data.update({
-                'order': {
-                    'invoice_number': self.sale.reference or '',
-                    'description': self.sale.description or '',
-                },
-            })
+        capture_data = self.get_authorize_net_request_data()
         if card_info:
             billing_address = self.address.get_authorize_address(
                 card_info.owner)
@@ -293,6 +275,17 @@ class AuthorizeNetTransaction:
             self.state = 'cancel'
             self.save()
             TransactionLog.serialize_and_create(self, result)
+
+    def get_authorize_net_request_data(self):
+        """
+        Downstream modules can modify this method to send extra data to
+        authorize.net
+
+        Ref: http://vcatalano.github.io/py-authorize/transaction.html
+        """
+        return {
+            'amount': self.amount
+        }
 
 
 class AddPaymentProfileView:

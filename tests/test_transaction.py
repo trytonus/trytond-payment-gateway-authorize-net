@@ -120,11 +120,6 @@ class TestTransaction(unittest.TestCase):
         if not accounts:
             return None
         account, = accounts
-
-        # Party required must be set to True for assigning party to
-        # account move lines as per 3.4 version changes
-        account.party_required = True
-        account.save()
         return account
 
     def setup_defaults(self):
@@ -347,6 +342,10 @@ class TestTransaction(unittest.TestCase):
                 }])
                 self.assert_(transaction4)
                 self.assertEqual(transaction4.state, 'draft')
+                self.assertEqual(
+                    transaction4.get_authorize_net_request_data(),
+                    {'amount': transaction4.amount}
+                )
 
                 # Capture transaction
                 with self.assertRaises(UserError):
