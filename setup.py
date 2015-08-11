@@ -1,13 +1,5 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-'''
-
-    Payment Gateway Setup
-
-    :copyright: (c) 2013-2015 by Openlabs Technologies & Consulting (P) Ltd.
-    :license: BSD, see LICENSE for more details
-
-'''
 import sys
 import re
 import os
@@ -61,9 +53,9 @@ requires = [
 ]
 
 MODULE = 'payment_gateway_authorize_net'
-PREFIX = 'openlabs'
+PREFIX = 'fio'
 MODULE2PREFIX = {
-    'payment_gateway': 'openlabs',
+    'payment_gateway': 'fio',
 }
 
 for dep in info.get('depends', []):
@@ -83,9 +75,9 @@ setup(
     name='%s_%s' % (PREFIX, MODULE),
     version=info.get('version', '0.0.1'),
     description="Tryton module for Payment Gatway/Merchant Integration",
-    author="Openlabs Technologies & consulting (P) Limited",
-    author_email='info@openlabs.co.in',
-    url='http://www.openlabs.co.in',
+    author="Fulfil.IO Inc.",
+    author_email='support@fulfil.io',
+    url='https://www.fulfil.io',
     package_dir={'trytond.modules.%s' % MODULE: '.'},
     packages=[
         'trytond.modules.%s' % MODULE,
@@ -101,14 +93,14 @@ setup(
         'Development Status :: 4 - Beta',
         'Environment :: Plugins',
         'Intended Audience :: Developers',
-        'License :: OSI Approved :: GNU General Public License v3 (GPLv3)',
+        'License :: OSI Approved :: BSD License',
         'Natural Language :: English',
         'Operating System :: OS Independent',
         'Programming Language :: Python',
         'Framework :: Tryton',
         'Topic :: Office/Business',
     ],
-    license='GPL-3',
+    license='BSD',
     install_requires=requires,
     extras_require={
         'docs': ['sphinx', 'sphinx_rtd_theme'],
