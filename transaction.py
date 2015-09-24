@@ -140,6 +140,8 @@ class AuthorizeNetTransaction:
         else:
             self.state = 'authorized'
             self.provider_reference = str(result.transaction_response.trans_id)
+            self.last_four_digits = card_info.number[-4:] if card_info else \
+                self.payment_profile.last_4_digits
             self.save()
             TransactionLog.serialize_and_create(self, result)
 
@@ -228,6 +230,8 @@ class AuthorizeNetTransaction:
         else:
             self.state = 'completed'
             self.provider_reference = str(result.transaction_response.trans_id)
+            self.last_four_digits = card_info.number[-4:] if card_info else \
+                self.payment_profile.last_4_digits
             self.save()
             TransactionLog.serialize_and_create(self, result)
             self.safe_post()
@@ -278,6 +282,28 @@ class AuthorizeNetTransaction:
         return {
             'amount': self.amount
         }
+
+    def refund_authorize_net(self):
+        TransactionLog = Pool().get('payment_gateway.transaction.log')
+
+        # Initialize authorize.net client
+        self.gateway.get_authorize_client()
+
+        try:
+            result = authorize.Transaction.refund({
+                'amount': self.amount,
+                'last_four': self.last_four_digits,
+                'transaction_id': self.origin.provider_reference,
+            })
+        except AuthorizeResponseError, exc:
+            self.state = 'failed'
+            self.save()
+            TransactionLog.serialize_and_create(self, exc.full_response)
+        else:
+            self.state = 'completed'
+            self.save()
+            TransactionLog.serialize_and_create(self, result)
+            self.safe_post()
 
 
 class AddPaymentProfileView:
