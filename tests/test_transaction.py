@@ -4,6 +4,7 @@ import datetime
 import random
 import authorize
 from dateutil.relativedelta import relativedelta
+from decimal import Decimal
 
 from trytond.tests.test_tryton import DB_NAME, USER, CONTEXT, POOL
 import trytond.tests.test_tryton
@@ -289,6 +290,7 @@ class TestTransaction(unittest.TestCase):
                     'payment_profile': self.payment_profile.id,
                     'gateway': self.auth_net_gateway.id,
                     'amount': random.randint(1, 5),
+                    'credit_account': self.party1.account_receivable.id,
                 }])
                 self.assert_(transaction1)
                 self.assertEqual(transaction1.state, 'draft')
@@ -303,6 +305,7 @@ class TestTransaction(unittest.TestCase):
                     'address': self.party2.addresses[0].id,
                     'gateway': self.auth_net_gateway.id,
                     'amount': random.randint(6, 10),
+                    'credit_account': self.party2.account_receivable.id,
                 }])
                 self.assert_(transaction2)
                 self.assertEqual(transaction2.state, 'draft')
@@ -318,6 +321,7 @@ class TestTransaction(unittest.TestCase):
                     'payment_profile': self.payment_profile.id,
                     'gateway': self.auth_net_gateway.id,
                     'amount': 0,
+                    'credit_account': self.party1.account_receivable.id,
                 }])
                 self.assert_(transaction3)
                 self.assertEqual(transaction3.state, 'draft')
@@ -333,6 +337,7 @@ class TestTransaction(unittest.TestCase):
                     'address': self.party3.addresses[0].id,
                     'gateway': self.auth_net_gateway.id,
                     'amount': random.randint(1, 5),
+                    'credit_account': self.party3.account_receivable.id,
                 }])
                 self.assert_(transaction4)
                 self.assertEqual(transaction4.state, 'draft')
@@ -360,6 +365,7 @@ class TestTransaction(unittest.TestCase):
                     'payment_profile': self.payment_profile.id,
                     'gateway': self.auth_net_gateway.id,
                     'amount': random.randint(6, 10),
+                    'credit_account': self.party1.account_receivable.id,
                 }])
                 self.assert_(transaction1)
                 self.assertEqual(transaction1.state, 'draft')
@@ -374,6 +380,7 @@ class TestTransaction(unittest.TestCase):
                     'address': self.party2.addresses[0].id,
                     'gateway': self.auth_net_gateway.id,
                     'amount': random.randint(1, 5),
+                    'credit_account': self.party2.account_receivable.id,
                 }])
                 self.assert_(transaction2)
                 self.assertEqual(transaction2.state, 'draft')
@@ -389,6 +396,7 @@ class TestTransaction(unittest.TestCase):
                     'payment_profile': self.payment_profile.id,
                     'gateway': self.auth_net_gateway.id,
                     'amount': 0,
+                    'credit_account': self.party1.account_receivable.id,
                 }])
                 self.assert_(transaction3)
                 self.assertEqual(transaction3.state, 'draft')
@@ -404,6 +412,7 @@ class TestTransaction(unittest.TestCase):
                     'address': self.party3.addresses[0].id,
                     'gateway': self.auth_net_gateway.id,
                     'amount': random.randint(1, 5),
+                    'credit_account': self.party3.account_receivable.id,
                 }])
                 self.assert_(transaction3)
                 self.assertEqual(transaction3.state, 'draft')
@@ -426,6 +435,7 @@ class TestTransaction(unittest.TestCase):
                     'address': self.party3.addresses[0].id,
                     'gateway': self.auth_net_gateway.id,
                     'amount': random.randint(6, 10),
+                    'credit_account': self.party3.account_receivable.id,
                 }])
                 self.assert_(transaction1)
                 self.assertEqual(transaction1.state, 'draft')
@@ -444,6 +454,7 @@ class TestTransaction(unittest.TestCase):
                     'address': self.party3.addresses[0].id,
                     'gateway': self.auth_net_gateway.id,
                     'amount': random.randint(1, 5),
+                    'credit_account': self.party3.account_receivable.id,
                 }])
                 self.assert_(transaction2)
                 self.assertEqual(transaction2.state, 'draft')
@@ -473,6 +484,7 @@ class TestTransaction(unittest.TestCase):
                     'gateway': self.auth_net_gateway.id,
                     'amount': random.randint(6, 10),
                     'state': 'in-progress',
+                    'credit_account': self.party2.account_receivable.id,
                 }])
                 self.assert_(transaction1)
                 self.assertEqual(transaction1.state, 'in-progress')
@@ -581,6 +593,45 @@ class TestTransaction(unittest.TestCase):
                 customer.customer_id
             )
             self.assert_(new_address_id)
+
+    @unittest.expectedFailure
+    def test_0080_test_transaction_refund(self):
+        """
+        Test refund transaction
+        """
+        with Transaction().start(DB_NAME, USER, context=CONTEXT):
+            self.setup_defaults()
+
+            with Transaction().set_context({'company': self.company.id}):
+
+                self.assertEqual(self.party1.payable, Decimal('0'))
+                self.assertEqual(self.party1.receivable, Decimal('0'))
+
+                transaction1, = self.PaymentTransaction.create([{
+                    'party': self.party1.id,
+                    'address': self.party1.addresses[0].id,
+                    'payment_profile': self.payment_profile.id,
+                    'gateway': self.auth_net_gateway.id,
+                    'amount': Decimal('10'),
+                    'credit_account': self.party1.account_receivable.id,
+                }])
+                self.assert_(transaction1)
+
+                # Capture transaction
+                self.PaymentTransaction.capture([transaction1])
+                self.assertEqual(transaction1.state, 'posted')
+
+                self.assertEqual(self.party1.payable, Decimal('0'))
+                self.assertEqual(self.party1.receivable, -Decimal('10'))
+
+                refund_transaction = transaction1.create_refund()
+
+                # Refund this transaction
+                self.PaymentTransaction.refund([refund_transaction])
+
+                self.assertEqual(transaction1.state, 'posted')
+                self.assertEqual(self.party1.payable, Decimal('0'))
+                self.assertEqual(self.party1.receivable, Decimal('0'))
 
 
 def suite():
