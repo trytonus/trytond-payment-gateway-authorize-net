@@ -3,8 +3,7 @@
 this repository contains the full copyright notices and license terms. -->
 <data>
     <xpath expr="/form/notebook" position="inside">
-        <page string="Authorize.net Settings" id="authorize_net"
-                states="{'invisible': Eval('provider') != 'authorize_net'}">
+        <page string="Authorize.net Settings" id="authorize_net">
             <label name="authorize_net_login"/>
             <field name="authorize_net_login"/>
             <label name="authorize_net_transaction_key"/>
