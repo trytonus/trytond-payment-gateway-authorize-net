@@ -37,7 +37,7 @@ class PaymentGatewayAuthorize:
     @classmethod
     def view_attributes(cls):
         return super(PaymentGatewayAuthorize, cls).view_attributes() + [
-            ('//page[@id="authorize_net"]', 'states', {
+            ('//notebook/page[@id="authorize_net"]', 'states', {
                 'invisible': Eval('provider') != 'authorize_net'
             })]
 
