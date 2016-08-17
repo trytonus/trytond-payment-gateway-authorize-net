@@ -5,8 +5,6 @@ from authorize.exceptions import AuthorizeInvalidError, \
 from trytond.pool import PoolMeta, Pool
 from trytond.pyson import Eval
 from trytond.model import fields
-from trytond import backend
-from trytond.transaction import Transaction
 
 __all__ = [
     'PaymentGatewayAuthorize', 'AddPaymentProfileView', 'AddPaymentProfile',
@@ -421,32 +419,6 @@ class AddPaymentProfile:
 
 class Party:
     __name__ = 'party.party'
-
-    @classmethod
-    def __register__(cls, module_name):
-        super(Party, cls).__register__(module_name)
-
-        PaymentProfile = Pool().get('party.payment_profile')
-
-        TableHandler = backend.get('TableHandler')
-        cursor = Transaction().cursor
-        table = TableHandler(cursor, cls, module_name)
-        party = cls.__table__()
-        payment_profile = PaymentProfile.__table__()
-
-        # Migration
-        # Move the content of authorize_profile_id from party to
-        # payment profiles and drop authorize_profile_id from party table
-        if table.column_exist('authorize_profile_id'):
-            update = payment_profile.update(
-                columns=[payment_profile.authorize_profile_id],
-                values=[party.authorize_profile_id],
-                from_=[party],
-                where=(payment_profile.party == party.id)
-            )
-            cursor.execute(*update)
-
-            table.drop_column('authorize_profile_id')
 
     def _get_authorize_net_customer_id(self, gateway_id):
         """

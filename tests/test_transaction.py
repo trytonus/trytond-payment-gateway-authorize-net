@@ -6,22 +6,26 @@ import authorize
 from dateutil.relativedelta import relativedelta
 from decimal import Decimal
 
-from trytond.tests.test_tryton import DB_NAME, USER, CONTEXT, POOL
+from trytond.tests.test_tryton import (
+    USER, CONTEXT, POOL,
+    ModuleTestCase, with_transaction
+)
 import trytond.tests.test_tryton
 from trytond.transaction import Transaction
 from trytond.exceptions import UserError
 
 
-class TestTransaction(unittest.TestCase):
+class TestTransaction(ModuleTestCase):
     """
     Test transaction
     """
+
+    module = 'payment_gateway_authorize_net'
 
     def setUp(self):
         """
         Set up data used in the tests.
         """
-        trytond.tests.test_tryton.install_module('payment_gateway')
 
         self.Currency = POOL.get('currency.currency')
         self.Company = POOL.get('company.company')
@@ -72,7 +76,8 @@ class TestTransaction(unittest.TestCase):
             'account.create_chart', type="wizard")
 
         account_template, = AccountTemplate.search(
-            [('parent', '=', None)]
+            [('parent', '=', None),
+             ('name', '=', 'Minimal Account Chart')]
         )
 
         session_id, _, _ = account_create_chart.create()
@@ -233,405 +238,403 @@ class TestTransaction(unittest.TestCase):
         )
         self.payment_profile.save()
 
+    @with_transaction()
     def test_0010_test_add_payment_profile(self):
         """
         Test adding payment profile to a Party
         """
-        with Transaction().start(DB_NAME, USER, context=CONTEXT):
-            self.setup_defaults()
+        self.setup_defaults()
 
-            ProfileWizard = POOL.get(
-                'party.party.payment_profile.add', type="wizard"
-            )
+        ProfileWizard = POOL.get(
+            'party.party.payment_profile.add', type="wizard"
+        )
 
-            profile_wizard = ProfileWizard(
-                ProfileWizard.create()[0]
-            )
-            profile_wizard.card_info.owner = self.party2.name
-            profile_wizard.card_info.number = self.card_data1['number']
-            profile_wizard.card_info.expiry_month = self.card_data1[
-                'expiry_month']
-            profile_wizard.card_info.expiry_year = self.card_data1[
-                'expiry_year']
-            profile_wizard.card_info.csc = self.card_data1['csc']
-            profile_wizard.card_info.gateway = self.auth_net_gateway
-            profile_wizard.card_info.provider = self.auth_net_gateway.provider
-            profile_wizard.card_info.address = self.party2.addresses[0]
-            profile_wizard.card_info.party = self.party2
+        profile_wizard = ProfileWizard(
+            ProfileWizard.create()[0]
+        )
+        profile_wizard.card_info.owner = self.party2.name
+        profile_wizard.card_info.number = self.card_data1.number
+        profile_wizard.card_info.expiry_month = self.card_data1.expiry_month
+        profile_wizard.card_info.expiry_year = self.card_data1.expiry_year
+        profile_wizard.card_info.csc = self.card_data1.csc
+        profile_wizard.card_info.gateway = self.auth_net_gateway
+        profile_wizard.card_info.provider = self.auth_net_gateway.provider
+        profile_wizard.card_info.address = self.party2.addresses[0]
+        profile_wizard.card_info.party = self.party2
 
-            with Transaction().set_context(return_profile=True):
-                profile = profile_wizard.transition_add()
+        with Transaction().set_context(return_profile=True):
+            profile = profile_wizard.transition_add()
 
-            self.assertEqual(profile.party.id, self.party2.id)
-            self.assertEqual(profile.gateway, self.auth_net_gateway)
-            self.assertEqual(
-                profile.last_4_digits, self.card_data1['number'][-4:]
-            )
-            self.assertEqual(
-                profile.expiry_month, self.card_data1['expiry_month']
-            )
-            self.assertEqual(
-                profile.expiry_year, self.card_data1['expiry_year']
-            )
-            self.assertIsNotNone(profile.authorize_profile_id)
+        self.assertEqual(profile.party.id, self.party2.id)
+        self.assertEqual(profile.gateway, self.auth_net_gateway)
+        self.assertEqual(
+            profile.last_4_digits, self.card_data1.number[-4:]
+        )
+        self.assertEqual(
+            profile.expiry_month, self.card_data1.expiry_month
+        )
+        self.assertEqual(
+            profile.expiry_year, self.card_data1.expiry_year
+        )
+        self.assertIsNotNone(profile.authorize_profile_id)
 
+    @with_transaction()
     def test_0020_test_transaction_capture(self):
         """
         Test capture transaction
         """
-        with Transaction().start(DB_NAME, USER, context=CONTEXT):
-            self.setup_defaults()
+        self.setup_defaults()
 
-            with Transaction().set_context({'company': self.company.id}):
-                # Case I: Payment Profile
-                transaction1, = self.PaymentTransaction.create([{
-                    'party': self.party1.id,
-                    'address': self.party1.addresses[0].id,
-                    'payment_profile': self.payment_profile.id,
-                    'gateway': self.auth_net_gateway.id,
-                    'amount': random.randint(1, 5),
-                    'credit_account': self.party1.account_receivable.id,
-                }])
-                self.assert_(transaction1)
-                self.assertEqual(transaction1.state, 'draft')
+        with Transaction().set_context({'company': self.company.id}):
+            # Case I: Payment Profile
+            transaction1, = self.PaymentTransaction.create([{
+                'party': self.party1.id,
+                'address': self.party1.addresses[0].id,
+                'payment_profile': self.payment_profile.id,
+                'gateway': self.auth_net_gateway.id,
+                'amount': random.randint(1, 5),
+                'credit_account': self.party1.account_receivable.id,
+            }])
+            self.assert_(transaction1)
+            self.assertEqual(transaction1.state, 'draft')
 
-                # Capture transaction
-                self.PaymentTransaction.capture([transaction1])
-                self.assertEqual(transaction1.state, 'posted')
+            # Capture transaction
+            self.PaymentTransaction.capture([transaction1])
+            self.assertEqual(transaction1.state, 'posted')
 
-                # Case II: No Payment Profile
-                transaction2, = self.PaymentTransaction.create([{
-                    'party': self.party2.id,
-                    'address': self.party2.addresses[0].id,
-                    'gateway': self.auth_net_gateway.id,
-                    'amount': random.randint(6, 10),
-                    'credit_account': self.party2.account_receivable.id,
-                }])
-                self.assert_(transaction2)
-                self.assertEqual(transaction2.state, 'draft')
+            # Case II: No Payment Profile
+            transaction2, = self.PaymentTransaction.create([{
+                'party': self.party2.id,
+                'address': self.party2.addresses[0].id,
+                'gateway': self.auth_net_gateway.id,
+                'amount': random.randint(6, 10),
+                'credit_account': self.party2.account_receivable.id,
+            }])
+            self.assert_(transaction2)
+            self.assertEqual(transaction2.state, 'draft')
 
-                # Capture transaction
-                transaction2.capture_authorize_net(card_info=self.card_data1)
-                self.assertEqual(transaction2.state, 'posted')
+            # Capture transaction
+            transaction2.capture_authorize_net(card_info=self.card_data1)
+            self.assertEqual(transaction2.state, 'posted')
 
-                # Case III: Transaction Failure on invalid amount
-                transaction3, = self.PaymentTransaction.create([{
-                    'party': self.party1.id,
-                    'address': self.party1.addresses[0].id,
-                    'payment_profile': self.payment_profile.id,
-                    'gateway': self.auth_net_gateway.id,
-                    'amount': 0,
-                    'credit_account': self.party1.account_receivable.id,
-                }])
-                self.assert_(transaction3)
-                self.assertEqual(transaction3.state, 'draft')
+            # Case III: Transaction Failure on invalid amount
+            transaction3, = self.PaymentTransaction.create([{
+                'party': self.party1.id,
+                'address': self.party1.addresses[0].id,
+                'payment_profile': self.payment_profile.id,
+                'gateway': self.auth_net_gateway.id,
+                'amount': 0,
+                'credit_account': self.party1.account_receivable.id,
+            }])
+            self.assert_(transaction3)
+            self.assertEqual(transaction3.state, 'draft')
 
-                # Capture transaction
-                self.PaymentTransaction.capture([transaction3])
-                self.assertEqual(transaction3.state, 'failed')
+            # Capture transaction
+            self.PaymentTransaction.capture([transaction3])
+            self.assertEqual(transaction3.state, 'failed')
 
-                # Case IV: Assert error when new customer is there with
-                # no payment profile and card info
-                transaction4, = self.PaymentTransaction.create([{
-                    'party': self.party3.id,
-                    'address': self.party3.addresses[0].id,
-                    'gateway': self.auth_net_gateway.id,
-                    'amount': random.randint(1, 5),
-                    'credit_account': self.party3.account_receivable.id,
-                }])
-                self.assert_(transaction4)
-                self.assertEqual(transaction4.state, 'draft')
-                self.assertEqual(
-                    transaction4.get_authorize_net_request_data(),
-                    {'amount': transaction4.amount}
-                )
+            # Case IV: Assert error when new customer is there with
+            # no payment profile and card info
+            transaction4, = self.PaymentTransaction.create([{
+                'party': self.party3.id,
+                'address': self.party3.addresses[0].id,
+                'gateway': self.auth_net_gateway.id,
+                'amount': random.randint(1, 5),
+                'credit_account': self.party3.account_receivable.id,
+            }])
+            self.assert_(transaction4)
+            self.assertEqual(transaction4.state, 'draft')
+            self.assertEqual(
+                transaction4.get_authorize_net_request_data(),
+                {'amount': transaction4.amount}
+            )
 
-                # Capture transaction
-                with self.assertRaises(UserError):
-                    self.PaymentTransaction.capture([transaction4])
+            # Capture transaction
+            with self.assertRaises(UserError):
+                self.PaymentTransaction.capture([transaction4])
 
+    @with_transaction()
     def test_0030_test_transaction_auth_only(self):
         """
         Test auth_only transaction
         """
-        with Transaction().start(DB_NAME, USER, context=CONTEXT):
-            self.setup_defaults()
+        self.setup_defaults()
 
-            with Transaction().set_context({'company': self.company.id}):
-                # Case I: Payment Profile
-                transaction1, = self.PaymentTransaction.create([{
-                    'party': self.party1.id,
-                    'address': self.party1.addresses[0].id,
-                    'payment_profile': self.payment_profile.id,
-                    'gateway': self.auth_net_gateway.id,
-                    'amount': random.randint(6, 10),
-                    'credit_account': self.party1.account_receivable.id,
-                }])
-                self.assert_(transaction1)
-                self.assertEqual(transaction1.state, 'draft')
+        with Transaction().set_context({'company': self.company.id}):
+            # Case I: Payment Profile
+            transaction1, = self.PaymentTransaction.create([{
+                'party': self.party1.id,
+                'address': self.party1.addresses[0].id,
+                'payment_profile': self.payment_profile.id,
+                'gateway': self.auth_net_gateway.id,
+                'amount': random.randint(6, 10),
+                'credit_account': self.party1.account_receivable.id,
+            }])
+            self.assert_(transaction1)
+            self.assertEqual(transaction1.state, 'draft')
 
-                # Authorize transaction
-                self.PaymentTransaction.authorize([transaction1])
-                self.assertEqual(transaction1.state, 'authorized')
+            # Authorize transaction
+            self.PaymentTransaction.authorize([transaction1])
+            self.assertEqual(transaction1.state, 'authorized')
 
-                # Case II: No Payment Profile
-                transaction2, = self.PaymentTransaction.create([{
-                    'party': self.party2.id,
-                    'address': self.party2.addresses[0].id,
-                    'gateway': self.auth_net_gateway.id,
-                    'amount': random.randint(1, 5),
-                    'credit_account': self.party2.account_receivable.id,
-                }])
-                self.assert_(transaction2)
-                self.assertEqual(transaction2.state, 'draft')
+            # Case II: No Payment Profile
+            transaction2, = self.PaymentTransaction.create([{
+                'party': self.party2.id,
+                'address': self.party2.addresses[0].id,
+                'gateway': self.auth_net_gateway.id,
+                'amount': random.randint(1, 5),
+                'credit_account': self.party2.account_receivable.id,
+            }])
+            self.assert_(transaction2)
+            self.assertEqual(transaction2.state, 'draft')
 
-                # Authorize transaction
-                transaction2.authorize_authorize_net(card_info=self.card_data1)
-                self.assertEqual(transaction2.state, 'authorized')
+            # Authorize transaction
+            transaction2.authorize_authorize_net(card_info=self.card_data1)
+            self.assertEqual(transaction2.state, 'authorized')
 
-                # Case III: Transaction Failure on invalid amount
-                transaction3, = self.PaymentTransaction.create([{
-                    'party': self.party1.id,
-                    'address': self.party1.addresses[0].id,
-                    'payment_profile': self.payment_profile.id,
-                    'gateway': self.auth_net_gateway.id,
-                    'amount': 0,
-                    'credit_account': self.party1.account_receivable.id,
-                }])
-                self.assert_(transaction3)
-                self.assertEqual(transaction3.state, 'draft')
+            # Case III: Transaction Failure on invalid amount
+            transaction3, = self.PaymentTransaction.create([{
+                'party': self.party1.id,
+                'address': self.party1.addresses[0].id,
+                'payment_profile': self.payment_profile.id,
+                'gateway': self.auth_net_gateway.id,
+                'amount': 0,
+                'credit_account': self.party1.account_receivable.id,
+            }])
+            self.assert_(transaction3)
+            self.assertEqual(transaction3.state, 'draft')
 
-                # Authorize transaction
+            # Authorize transaction
+            self.PaymentTransaction.authorize([transaction3])
+            self.assertEqual(transaction3.state, 'failed')
+
+            # Case IV: Assert error when new customer is there with
+            # no payment profile and card info
+            transaction3, = self.PaymentTransaction.create([{
+                'party': self.party3.id,
+                'address': self.party3.addresses[0].id,
+                'gateway': self.auth_net_gateway.id,
+                'amount': random.randint(1, 5),
+                'credit_account': self.party3.account_receivable.id,
+            }])
+            self.assert_(transaction3)
+            self.assertEqual(transaction3.state, 'draft')
+
+            # Authorize transaction
+            with self.assertRaises(UserError):
                 self.PaymentTransaction.authorize([transaction3])
-                self.assertEqual(transaction3.state, 'failed')
 
-                # Case IV: Assert error when new customer is there with
-                # no payment profile and card info
-                transaction3, = self.PaymentTransaction.create([{
-                    'party': self.party3.id,
-                    'address': self.party3.addresses[0].id,
-                    'gateway': self.auth_net_gateway.id,
-                    'amount': random.randint(1, 5),
-                    'credit_account': self.party3.account_receivable.id,
-                }])
-                self.assert_(transaction3)
-                self.assertEqual(transaction3.state, 'draft')
-
-                # Authorize transaction
-                with self.assertRaises(UserError):
-                    self.PaymentTransaction.authorize([transaction3])
-
+    @with_transaction()
     def test_0040_test_transaction_auth_and_settle(self):
         """
         Test auth_and_settle transaction
         """
-        with Transaction().start(DB_NAME, USER, context=CONTEXT):
-            self.setup_defaults()
+        self.setup_defaults()
 
-            with Transaction().set_context({'company': self.company.id}):
-                # Case I: Same or less amount than authorized amount
-                transaction1, = self.PaymentTransaction.create([{
-                    'party': self.party3.id,
-                    'address': self.party3.addresses[0].id,
-                    'gateway': self.auth_net_gateway.id,
-                    'amount': random.randint(6, 10),
-                    'credit_account': self.party3.account_receivable.id,
-                }])
-                self.assert_(transaction1)
-                self.assertEqual(transaction1.state, 'draft')
+        with Transaction().set_context({'company': self.company.id}):
+            # Case I: Same or less amount than authorized amount
+            transaction1, = self.PaymentTransaction.create([{
+                'party': self.party3.id,
+                'address': self.party3.addresses[0].id,
+                'gateway': self.auth_net_gateway.id,
+                'amount': random.randint(6, 10),
+                'credit_account': self.party3.account_receivable.id,
+            }])
+            self.assert_(transaction1)
+            self.assertEqual(transaction1.state, 'draft')
 
-                # Authorize transaction
-                transaction1.authorize_authorize_net(card_info=self.card_data1)
-                self.assertEqual(transaction1.state, 'authorized')
+            # Authorize transaction
+            transaction1.authorize_authorize_net(card_info=self.card_data1)
+            self.assertEqual(transaction1.state, 'authorized')
 
-                # Assert if transaction succeeds
-                self.PaymentTransaction.settle([transaction1])
-                self.assertEqual(transaction1.state, 'posted')
+            # Assert if transaction succeeds
+            self.PaymentTransaction.settle([transaction1])
+            self.assertEqual(transaction1.state, 'posted')
 
-                # Case II: More amount than authorized amount
-                transaction2, = self.PaymentTransaction.create([{
-                    'party': self.party3.id,
-                    'address': self.party3.addresses[0].id,
-                    'gateway': self.auth_net_gateway.id,
-                    'amount': random.randint(1, 5),
-                    'credit_account': self.party3.account_receivable.id,
-                }])
-                self.assert_(transaction2)
-                self.assertEqual(transaction2.state, 'draft')
+            # Case II: More amount than authorized amount
+            transaction2, = self.PaymentTransaction.create([{
+                'party': self.party3.id,
+                'address': self.party3.addresses[0].id,
+                'gateway': self.auth_net_gateway.id,
+                'amount': random.randint(1, 5),
+                'credit_account': self.party3.account_receivable.id,
+            }])
+            self.assert_(transaction2)
+            self.assertEqual(transaction2.state, 'draft')
 
-                # Authorize transaction
-                transaction2.authorize_authorize_net(card_info=self.card_data2)
-                self.assertEqual(transaction2.state, 'authorized')
+            # Authorize transaction
+            transaction2.authorize_authorize_net(card_info=self.card_data2)
+            self.assertEqual(transaction2.state, 'authorized')
 
-                # Assert if transaction fails.
-                self.PaymentTransaction.write([transaction2], {
-                    'amount': 6,
-                })
-                self.PaymentTransaction.settle([transaction2])
-                self.assertEqual(transaction2.state, 'failed')
+            # Assert if transaction fails.
+            self.PaymentTransaction.write([transaction2], {
+                'amount': 6,
+            })
+            self.PaymentTransaction.settle([transaction2])
+            self.assertEqual(transaction2.state, 'failed')
 
+    @with_transaction()
     def test_0050_test_transaction_auth_and_cancel(self):
         """
         Test auth_and_void transaction
         """
-        with Transaction().start(DB_NAME, USER, context=CONTEXT):
-            self.setup_defaults()
+        self.setup_defaults()
 
-            with Transaction().set_context({'company': self.company.id}):
-                transaction1, = self.PaymentTransaction.create([{
-                    'party': self.party2.id,
-                    'address': self.party2.addresses[0].id,
-                    'gateway': self.auth_net_gateway.id,
-                    'amount': random.randint(6, 10),
-                    'state': 'in-progress',
-                    'credit_account': self.party2.account_receivable.id,
-                }])
-                self.assert_(transaction1)
-                self.assertEqual(transaction1.state, 'in-progress')
+        with Transaction().set_context({'company': self.company.id}):
+            transaction1, = self.PaymentTransaction.create([{
+                'party': self.party2.id,
+                'address': self.party2.addresses[0].id,
+                'gateway': self.auth_net_gateway.id,
+                'amount': random.randint(6, 10),
+                'state': 'in-progress',
+                'credit_account': self.party2.account_receivable.id,
+            }])
+            self.assert_(transaction1)
+            self.assertEqual(transaction1.state, 'in-progress')
 
-                # Assert User error if cancel request is sent
-                # in state other than authorized
-                with self.assertRaises(UserError):
-                    self.PaymentTransaction.cancel([transaction1])
-
-                transaction1.state = 'draft'
-                transaction1.save()
-
-                # Authorize transaction
-                transaction1.authorize_authorize_net(card_info=self.card_data1)
-                self.assertEqual(transaction1.state, 'authorized')
-
-                # Settle transaction
+            # Assert User error if cancel request is sent
+            # in state other than authorized
+            with self.assertRaises(UserError):
                 self.PaymentTransaction.cancel([transaction1])
-                self.assertEqual(transaction1.state, 'cancel')
 
+            transaction1.state = 'draft'
+            transaction1.save()
+
+            # Authorize transaction
+            transaction1.authorize_authorize_net(card_info=self.card_data1)
+            self.assertEqual(transaction1.state, 'authorized')
+
+            # Settle transaction
+            self.PaymentTransaction.cancel([transaction1])
+            self.assertEqual(transaction1.state, 'cancel')
+
+    @with_transaction()
     def test_0060_test_duplicate_payment_profile(self):
         """
         Test that workflow is not effected if duplicate payment profile
         is there on authorize.net
         """
-        with Transaction().start(DB_NAME, USER, context=CONTEXT):
-            self.setup_defaults()
+        self.setup_defaults()
 
-            customer = authorize.Customer.create()
-            authorize.CreditCard.create(customer.customer_id, {
-                'card_number': '4111111111111111',
-                'card_code': '523',
-                'expiration_date': '05/2023',
-                'billing': self.party2.addresses[0].get_authorize_address(
-                    'Test User'
-                ),
-            })
+        customer = authorize.Customer.create()
+        authorize.CreditCard.create(customer.customer_id, {
+            'card_number': '4111111111111111',
+            'card_code': '523',
+            'expiration_date': '05/2023',
+            'billing': self.party2.addresses[0].get_authorize_address(
+                'Test User'
+            ),
+        })
 
-            # Create a payment profile with some random payment id
-            payment_profile = self.PaymentProfile(
-                party=self.party2,
-                address=self.party2.addresses[0].id,
-                gateway=self.auth_net_gateway.id,
-                last_4_digits='1111',
-                expiry_month='05',
-                expiry_year='2023',
-                provider_reference='67382920',
-                authorize_profile_id=customer.customer_id,
-            )
-            payment_profile.save()
+        # Create a payment profile with some random payment id
+        payment_profile = self.PaymentProfile(
+            party=self.party2,
+            address=self.party2.addresses[0].id,
+            gateway=self.auth_net_gateway.id,
+            last_4_digits='1111',
+            expiry_month='05',
+            expiry_year='2023',
+            provider_reference='67382920',
+            authorize_profile_id=customer.customer_id,
+        )
+        payment_profile.save()
 
-            # Create payment profile with same details as above
-            ProfileWizard = POOL.get(
-                'party.party.payment_profile.add', type="wizard"
-            )
+        # Create payment profile with same details as above
+        ProfileWizard = POOL.get(
+            'party.party.payment_profile.add', type="wizard"
+        )
 
-            profile_wizard = ProfileWizard(
-                ProfileWizard.create()[0]
-            )
-            profile_wizard.card_info.owner = 'Test User'
-            profile_wizard.card_info.number = '4111111111111111'
-            profile_wizard.card_info.expiry_month = '05'
-            profile_wizard.card_info.expiry_year = '2023'
-            profile_wizard.card_info.csc = '523'
-            profile_wizard.card_info.gateway = self.auth_net_gateway
-            profile_wizard.card_info.provider = self.auth_net_gateway.provider
-            profile_wizard.card_info.address = self.party2.addresses[0]
-            profile_wizard.card_info.party = self.party2
+        profile_wizard = ProfileWizard(
+            ProfileWizard.create()[0]
+        )
+        profile_wizard.card_info.owner = 'Test User'
+        profile_wizard.card_info.number = '4111111111111111'
+        profile_wizard.card_info.expiry_month = '05'
+        profile_wizard.card_info.expiry_year = '2023'
+        profile_wizard.card_info.csc = '523'
+        profile_wizard.card_info.gateway = self.auth_net_gateway
+        profile_wizard.card_info.provider = self.auth_net_gateway.provider
+        profile_wizard.card_info.address = self.party2.addresses[0]
+        profile_wizard.card_info.party = self.party2
 
-            with Transaction().set_context(return_profile=True):
-                profile = profile_wizard.transition_add()
+        with Transaction().set_context(return_profile=True):
+            profile = profile_wizard.transition_add()
 
-            self.assertEqual(profile.party.id, self.party2.id)
-            self.assertEqual(profile.gateway, self.auth_net_gateway)
-            self.assertEqual(
-                profile.last_4_digits, '1111'
-            )
-            self.assertEqual(
-                profile.expiry_month, '05'
-            )
-            self.assertEqual(
-                profile.expiry_year, '2023'
-            )
-            self.assertIsNotNone(profile.authorize_profile_id)
-            self.assertEqual(
-                profile.authorize_profile_id,
-                payment_profile.authorize_profile_id
-            )
+        self.assertEqual(profile.party.id, self.party2.id)
+        self.assertEqual(profile.gateway, self.auth_net_gateway)
+        self.assertEqual(
+            profile.last_4_digits, '1111'
+        )
+        self.assertEqual(
+            profile.expiry_month, '05'
+        )
+        self.assertEqual(
+            profile.expiry_year, '2023'
+        )
+        self.assertIsNotNone(profile.authorize_profile_id)
+        self.assertEqual(
+            profile.authorize_profile_id,
+            payment_profile.authorize_profile_id
+        )
 
+    @with_transaction()
     def test_0070_test_duplicate_shipping_address(self):
         """
         Test that workflow is not effected if duplicate shipping address
         is sent.
         """
-        with Transaction().start(DB_NAME, USER, context=CONTEXT):
-            self.setup_defaults()
+        self.setup_defaults()
 
-            customer = authorize.Customer.create()
-            authorize.Address.create(
-                customer.customer_id,
-                self.party1.addresses[0].get_authorize_address()
-            )
+        customer = authorize.Customer.create()
+        authorize.Address.create(
+            customer.customer_id,
+            self.party1.addresses[0].get_authorize_address()
+        )
 
-            # Try creating shipping address with same address
-            new_address_id = self.party2.addresses[0].send_to_authorize(
-                customer.customer_id
-            )
-            self.assert_(new_address_id)
+        # Try creating shipping address with same address
+        new_address_id = self.party2.addresses[0].send_to_authorize(
+            customer.customer_id
+        )
+        self.assert_(new_address_id)
 
+    @with_transaction()
     @unittest.expectedFailure
     def test_0080_test_transaction_refund(self):
         """
         Test refund transaction
         """
-        with Transaction().start(DB_NAME, USER, context=CONTEXT):
-            self.setup_defaults()
+        self.setup_defaults()
 
-            with Transaction().set_context({'company': self.company.id}):
+        with Transaction().set_context({'company': self.company.id}):
 
-                self.assertEqual(self.party1.payable, Decimal('0'))
-                self.assertEqual(self.party1.receivable, Decimal('0'))
+            self.assertEqual(self.party1.payable, Decimal('0'))
+            self.assertEqual(self.party1.receivable, Decimal('0'))
 
-                transaction1, = self.PaymentTransaction.create([{
-                    'party': self.party1.id,
-                    'address': self.party1.addresses[0].id,
-                    'payment_profile': self.payment_profile.id,
-                    'gateway': self.auth_net_gateway.id,
-                    'amount': Decimal('10'),
-                    'credit_account': self.party1.account_receivable.id,
-                }])
-                self.assert_(transaction1)
+            transaction1, = self.PaymentTransaction.create([{
+                'party': self.party1.id,
+                'address': self.party1.addresses[0].id,
+                'payment_profile': self.payment_profile.id,
+                'gateway': self.auth_net_gateway.id,
+                'amount': Decimal('10'),
+                'credit_account': self.party1.account_receivable.id,
+            }])
+            self.assert_(transaction1)
 
-                # Capture transaction
-                self.PaymentTransaction.capture([transaction1])
-                self.assertEqual(transaction1.state, 'posted')
+            # Capture transaction
+            self.PaymentTransaction.capture([transaction1])
+            self.assertEqual(transaction1.state, 'posted')
 
-                self.assertEqual(self.party1.payable, Decimal('0'))
-                self.assertEqual(self.party1.receivable, -Decimal('10'))
+            self.assertEqual(self.party1.payable, Decimal('0'))
+            self.assertEqual(self.party1.receivable, -Decimal('10'))
 
-                refund_transaction = transaction1.create_refund()
+            refund_transaction = transaction1.create_refund()
 
-                # Refund this transaction
-                self.PaymentTransaction.refund([refund_transaction])
+            # Refund this transaction
+            self.PaymentTransaction.refund([refund_transaction])
 
-                self.assertEqual(transaction1.state, 'posted')
-                self.assertEqual(self.party1.payable, Decimal('0'))
-                self.assertEqual(self.party1.receivable, Decimal('0'))
+            self.assertEqual(transaction1.state, 'posted')
+            self.assertEqual(self.party1.payable, Decimal('0'))
+            self.assertEqual(self.party1.receivable, Decimal('0'))
 
 
 def suite():
