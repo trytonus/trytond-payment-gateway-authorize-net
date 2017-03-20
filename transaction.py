@@ -7,7 +7,7 @@ from trytond.pyson import Eval
 from trytond.model import fields
 
 __all__ = [
-    'PaymentGatewayAuthorize', 'AddPaymentProfileView', 'AddPaymentProfile',
+    'PaymentGatewayAuthorize', 'AddPaymentProfile',
     'AuthorizeNetTransaction', 'Party', 'Address', 'PaymentProfile'
 ]
 __metaclass__ = PoolMeta
@@ -309,19 +309,6 @@ class AuthorizeNetTransaction:
             self.save()
             TransactionLog.serialize_and_create(self, result)
             self.safe_post()
-
-
-class AddPaymentProfileView:
-    __name__ = 'party.payment_profile.add_view'
-
-    @classmethod
-    def get_providers(cls):
-        """
-        Return the list of providers who support credit card profiles.
-        """
-        res = super(AddPaymentProfileView, cls).get_providers()
-        res.append(('authorize_net', 'Authorize.net'))
-        return res
 
 
 class AddPaymentProfile:
