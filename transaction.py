@@ -472,10 +472,18 @@ class Address:
         :param name: Name to send as first name in address.
             Default is party's name.
         """
+        name = name or self.name or self.party.name
+
+        try:
+            first_name, last_name = name.split(" ", 1)
+        except ValueError:
+            first_name = name
+            last_name = ""
+
         return {
-            'first_name': name or self.name or self.party.name,
-            'last_name': '',
-            'company': '',
+            'first_name': first_name,
+            'last_name': last_name,
+            'company': self.party.name,
             'address': '\n'.join(filter(None, [self.street, self.streetbis])),
             'city': self.city,
             'state': self.subdivision and self.subdivision.code,
