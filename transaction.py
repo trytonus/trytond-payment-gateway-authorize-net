@@ -131,7 +131,7 @@ class AuthorizeNetTransaction:
             auth_data.update({
                 'customer_id': self.payment_profile.authorize_profile_id,
                 'payment_id': self.payment_profile.provider_reference,
-                'address_id': address_id,
+                'shipping_id': address_id,
             })
         else:
             self.raise_user_error('no_card_or_profile')
