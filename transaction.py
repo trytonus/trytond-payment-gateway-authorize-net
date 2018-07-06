@@ -143,10 +143,20 @@ class AuthorizeNetTransaction:
             self.save()
             TransactionLog.serialize_and_create(self, exc.full_response)
         else:
-            self.state = 'authorized'
+            # Following response codes are given:
+            # 1 -- Approved
+            # 2 -- Declined
+            # 3 -- Error
+            # 4 -- Held for Review
             self.provider_reference = str(result.transaction_response.trans_id)
             self.last_four_digits = card_info.number[-4:] if card_info else \
                 self.payment_profile.last_4_digits
+            if result.transaction_response.response_code == '1':
+                self.state = 'authorized'
+            elif result.transaction_response.response_code == '4':
+                self.state = 'in-progress'
+            else:
+                self.state = 'failed'
             self.save()
             TransactionLog.serialize_and_create(self, result)
 
@@ -168,11 +178,22 @@ class AuthorizeNetTransaction:
             self.save()
             TransactionLog.serialize_and_create(self, exc.full_response)
         else:
-            self.state = 'completed'
+            # Following response codes are given:
+            # 1 -- Approved
+            # 2 -- Declined
+            # 3 -- Error
+            # 4 -- Held for Review
             self.provider_reference = str(result.transaction_response.trans_id)
+            if result.transaction_response.response_code == '1':
+                self.state = 'completed'
+            elif result.transaction_response.response_code == '4':
+                self.state = 'in-progress'
+            else:
+                self.state = 'failed'
             self.save()
             TransactionLog.serialize_and_create(self, result)
-            self.safe_post()
+            if self.state == 'completed':
+                self.safe_post()
 
     def capture_authorize_net(self, card_info=None):
         """
@@ -233,13 +254,24 @@ class AuthorizeNetTransaction:
             self.save()
             TransactionLog.serialize_and_create(self, exc.full_response)
         else:
-            self.state = 'completed'
+            # Following response codes are given:
+            # 1 -- Approved
+            # 2 -- Declined
+            # 3 -- Error
+            # 4 -- Held for Review
             self.provider_reference = str(result.transaction_response.trans_id)
             self.last_four_digits = card_info.number[-4:] if card_info else \
                 self.payment_profile.last_4_digits
+            if result.transaction_response.response_code == '1':
+                self.state = 'completed'
+            elif result.transaction_response.response_code == '4':
+                self.state = 'in-progress'
+            else:
+                self.state = 'failed'
             self.save()
             TransactionLog.serialize_and_create(self, result)
-            self.safe_post()
+            if self.state == 'completed':
+                self.safe_post()
 
     def retry_authorize_net(self, credit_card=None):  # pragma: no cover
         """
@@ -253,7 +285,23 @@ class AuthorizeNetTransaction:
         """
         Update the status of the transaction from Authorize.net
         """
-        raise self.raise_user_error('feature_not_available')
+        TransactionLog = Pool().get('payment_gateway.transaction.log')
+        result = authorize.Transaction.details(self.provider_reference)
+        if result.transaction.response_code == '1':
+            if result.transaction.transaction_type in (
+                    'authCaptureTransaction', 'priorAuthCaptureTransaction'
+            ):
+                self.state = 'completed'
+            elif result.transaction.transaction_type == 'authorizeOnlyTransaction':  # noqa
+                self.state = 'authorized'
+        elif result.transaction.response_code == '4':
+            pass
+        else:
+            self.state = 'failed'
+        self.save()
+        TransactionLog.serialize_and_create(self, result)
+        if self.state == 'completed':
+            self.safe_post()
 
     def cancel_authorize_net(self):
         """
