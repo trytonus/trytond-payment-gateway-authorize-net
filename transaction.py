@@ -529,9 +529,9 @@ class Address:
             last_name = ""
 
         return {
-            'first_name': first_name,
-            'last_name': last_name,
-            'company': self.party.name,
+            'first_name': first_name[:50],
+            'last_name': last_name[:50],
+            'company': self.party.name[:50],
             'address': '\n'.join(filter(None, [self.street, self.streetbis])),
             'city': self.city,
             'state': self.subdivision and self.subdivision.code,
