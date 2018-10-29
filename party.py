@@ -84,7 +84,7 @@ class Address:
                     # Delete all addresses on authorize.net
                     self.delete_authorize_addresses(profile_id)
                     continue
-                self.raise_user_error(unicode(exc.message))
+                self.raise_user_error(unicode(exc))
             except AuthorizeInvalidError, exc:
                 self.raise_user_error(unicode(exc))
 
@@ -148,3 +148,97 @@ class PaymentProfile:
     authorize_profile_id = fields.Char(
         'Authorize.net Profile ID', readonly=True
     )
+
+    @classmethod
+    def __setup__(cls):
+        super(PaymentProfile, cls).__setup__()
+        cls.__rpc__.update({
+            'create_profile_using_authorize_net_nonce': RPC(
+                instantiate=0, readonly=False
+            )
+        })
+
+    @classmethod
+    def create_profile_using_authorize_net_nonce(
+        cls, user_id, gateway_id, nonce_data, address_id=None
+    ):
+        """
+        Create a Payment Profile using nonce_data returned by auth.net using
+        accept.js
+        """
+        Address = Pool().get('party.address')
+        Party = Pool().get('party.party')
+        PaymentGateway = Pool().get('payment_gateway.gateway')
+        PaymentProfile = Pool().get('party.payment_profile')
+
+        opaque_data = nonce_data['opaqueData']
+        customer_info = nonce_data['customerInformation']
+        card_info = nonce_data['encryptedCardData']
+
+        party = Party(user_id)
+        gateway = PaymentGateway(gateway_id)
+        assert gateway.provider == 'authorize_net'
+        gateway.get_authorize_client()
+
+        customer_id = party._get_authorize_net_customer_id(
+            gateway.id
+        )
+        if not customer_id:
+            customer_id = party.create_auth_profile()
+
+        card_data = {
+            'opaque_data': {
+                'data_descriptor': opaque_data['dataDescriptor'],
+                'data_value': opaque_data['dataValue'],
+            }
+        }
+        if address_id:
+            address_data = Address(address_id).get_authorize_address()
+            card_data['billing'] = address_data
+
+        try:
+            credit_card = authorize.CreditCard.create(
+                customer_id, card_data
+            )
+        except AuthorizeInvalidError, exc:
+            cls.raise_user_error(unicode(exc))
+        except AuthorizeResponseError, exc:
+            if 'E00039' in unicode(exc):
+                # Delete all unused payment profiles on authorize.net
+                customer_details = authorize.Customer.details(customer_id)
+                auth_payment_ids = set([
+                    p.payment_id for p in customer_details.profile.payments
+                ])
+                if party.payment_profiles:
+                    local_payment_ids = set([
+                        p.provider_reference for p in party.payment_profiles  # noqa
+                    ])
+                    ids_to_delete = auth_payment_ids.difference(
+                        local_payment_ids
+                    )
+                else:
+                    ids_to_delete = auth_payment_ids
+
+                if ids_to_delete:
+                    for payment_id in ids_to_delete:
+                        authorize.CreditCard.delete(customer_id, payment_id)
+            cls.raise_user_error(unicode(exc))
+
+        name = (
+            customer_info.get('firstName', '') +
+            customer_info.get('lastName', '')
+        )
+        expiry_month, expiry_year = card_info['expDate'].split('/')
+
+        profile, = PaymentProfile.create([{
+            'name': name or party.name,
+            'party': party.id,
+            'address': address_id or party.addresses[0].id,
+            'gateway': gateway.id,
+            'last_4_digits': card_info['cardNumber'][-4:],
+            'expiry_month': expiry_month,
+            'expiry_year': expiry_year,
+            'provider_reference': credit_card.payment_id,
+            'authorize_profile_id': customer_id,
+        }])
+        return profile.id

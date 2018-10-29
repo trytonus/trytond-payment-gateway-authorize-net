@@ -30,6 +30,13 @@ class PaymentGatewayAuthorize:
             'readonly': ~Eval('active', True),
         }, depends=['provider', 'active']
     )
+    authorize_net_client_key = fields.Char(
+        'Client Key', states={
+            'required': Eval('provider') == 'authorize_net',
+            'invisible': Eval('provider') != 'authorize_net',
+            'readonly': ~Eval('active', True),
+        }, depends=['provider', 'active']
+    )
 
     @classmethod
     def view_attributes(cls):

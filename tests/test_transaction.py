@@ -169,6 +169,7 @@ class TestTransaction(ModuleTestCase):
             method='credit_card',
             authorize_net_login='327deWY74422',
             authorize_net_transaction_key='32jF65cTxja88ZA2',
+            authorize_net_client_key='dummy-client-key',
             test=True
         )
         self.auth_net_gateway.save()
