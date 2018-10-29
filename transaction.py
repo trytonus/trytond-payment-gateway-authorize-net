@@ -378,7 +378,7 @@ class AddPaymentProfile:
         )
         # Create new customer profile if no old profile is there
         if not customer_id:
-            customer_id = self.create_auth_customer_profile()
+            customer_id = self.card_info.party.create_auth_profile()
 
         # Now create new credit card and associate it with the above
         # created customer
@@ -436,19 +436,3 @@ class AddPaymentProfile:
             credit_card.payment_id,
             authorize_profile_id=customer_id
         )
-
-    def create_auth_customer_profile(self):
-        """
-        Creates a customer profile on authorize.net and returns
-        created profile's ID
-        """
-        customer_party = self.card_info.party
-        try:
-            customer = authorize.Customer.create({
-                'description': customer_party.name,
-                'email': customer_party.email,
-            })
-        except AuthorizeInvalidError, exc:
-            self.raise_user_error(unicode(exc))
-
-        return customer.customer_id

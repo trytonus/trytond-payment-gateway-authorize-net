@@ -9,6 +9,7 @@ from authorize.exceptions import AuthorizeInvalidError, \
     AuthorizeResponseError
 
 from trytond.model import fields
+from trytond.rpc import RPC
 from trytond.pool import PoolMeta, Pool
 
 __metaclass__ = PoolMeta
@@ -35,6 +36,21 @@ class Party:
         if payment_profiles:
             return payment_profiles[0].authorize_profile_id
         return None
+
+    def create_auth_profile(self):
+        """
+        Creates a customer profile on authorize.net and returns
+        created profile's ID
+        """
+        try:
+            customer = authorize.Customer.create({
+                'description': self.name,
+                'email': self.email,
+            })
+        except AuthorizeInvalidError, exc:
+            self.raise_user_error(unicode(exc))
+
+        return customer.customer_id
 
 
 class Address:
