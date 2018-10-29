@@ -383,11 +383,13 @@ class AddPaymentProfile:
         # Now create new credit card and associate it with the above
         # created customer
         credit_card_data = {
-            'card_number': card_info.number,
-            'card_code': str(card_info.csc),
-            'expiration_date': "%s/%s" % (
-                card_info.expiry_month, card_info.expiry_year
-            ),
+            'credit_card': {
+                'card_number': card_info.number,
+                'card_code': str(card_info.csc),
+                'expiration_date': "%s/%s" % (
+                    card_info.expiry_month, card_info.expiry_year
+                ),
+            },
             'billing': card_info.address.get_authorize_address(card_info.owner)
         }
         for try_count in range(2):
@@ -398,7 +400,8 @@ class AddPaymentProfile:
                 # Validate newly created credit card
                 authorize.CreditCard.validate(
                     customer_id, credit_card.payment_id, {
-                        'card_code': credit_card_data['card_code'],
+                        'card_code':
+                            credit_card_data['credit_card']['card_code'],
                         'validationMode': 'testMode' if card_info.gateway.test
                         else 'liveMode'
                     }
