@@ -5,6 +5,7 @@ import random
 import authorize
 from dateutil.relativedelta import relativedelta
 from decimal import Decimal
+from datetime import date
 
 from trytond.tests.test_tryton import (
     USER, CONTEXT, POOL,
@@ -168,9 +169,11 @@ class TestTransaction(ModuleTestCase):
             method='credit_card',
             authorize_net_login='327deWY74422',
             authorize_net_transaction_key='32jF65cTxja88ZA2',
+            authorize_net_client_key='dummy-client-key',
             test=True
         )
         self.auth_net_gateway.save()
+        self.auth_net_gateway.get_authorize_client()
 
         # Create parties
         self.party1, = self.Party.create([{
@@ -207,34 +210,46 @@ class TestTransaction(ModuleTestCase):
         self.card_data1 = self.UseCardView(
             number='4111111111111111',
             expiry_month='04',
-            expiry_year=str(random.randint(2016, 2020)),
+            expiry_year=str(date.today().year + 1),
             csc=str(random.randint(100, 555)),
             owner='Test User -1',
         )
         self.card_data2 = self.UseCardView(
             number='4111111111111111',
             expiry_month='08',
-            expiry_year=str(random.randint(2016, 2020)),
+            expiry_year=str(date.today().year + 1),
             csc=str(random.randint(556, 999)),
             owner='Test User -2',
         )
         self.invalid_card_data = self.UseCardView(
             number='4111111111111111',
             expiry_month='08',
-            expiry_year='2022',
+            expiry_year=str(date.today().year - 1),
             csc=str(911),
             owner='Test User -2',
         )
 
+        # Get authorize_profile_id
+        customer = authorize.Customer.create()
+        credit_card = authorize.CreditCard.create(customer.customer_id, {
+            'credit_card': {
+                'card_number': '4111111111111111',
+                'card_code': '523',
+                'expiration_date': '01/%s' % str(date.today().year + 1),
+            },
+            'billing': self.party1.addresses[0].get_authorize_address(
+                'Test User'
+            ),
+        })
         self.payment_profile = self.PaymentProfile(
             party=self.party1,
             address=self.party1.addresses[0].id,
             gateway=self.auth_net_gateway.id,
             last_4_digits='1111',
             expiry_month='01',
-            expiry_year='2018',
-            provider_reference='27527167',
-            authorize_profile_id='28545177',
+            expiry_year=str(date.today().year + 1),
+            provider_reference=credit_card.payment_id,
+            authorize_profile_id=customer.customer_id,
         )
         self.payment_profile.save()
 
@@ -515,12 +530,15 @@ class TestTransaction(ModuleTestCase):
         is there on authorize.net
         """
         self.setup_defaults()
+        expiry_year = str(date.today().year + 1)
 
         customer = authorize.Customer.create()
         authorize.CreditCard.create(customer.customer_id, {
-            'card_number': '4111111111111111',
-            'card_code': '523',
-            'expiration_date': '05/2023',
+            'credit_card': {
+                'card_number': '4111111111111111',
+                'card_code': '523',
+                'expiration_date': '05/%s' % expiry_year,
+            },
             'billing': self.party2.addresses[0].get_authorize_address(
                 'Test User'
             ),
@@ -533,7 +551,7 @@ class TestTransaction(ModuleTestCase):
             gateway=self.auth_net_gateway.id,
             last_4_digits='1111',
             expiry_month='05',
-            expiry_year='2023',
+            expiry_year=expiry_year,
             provider_reference='67382920',
             authorize_profile_id=customer.customer_id,
         )
@@ -550,7 +568,7 @@ class TestTransaction(ModuleTestCase):
         profile_wizard.card_info.owner = 'Test User'
         profile_wizard.card_info.number = '4111111111111111'
         profile_wizard.card_info.expiry_month = '05'
-        profile_wizard.card_info.expiry_year = '2023'
+        profile_wizard.card_info.expiry_year = expiry_year
         profile_wizard.card_info.csc = '523'
         profile_wizard.card_info.gateway = self.auth_net_gateway
         profile_wizard.card_info.provider = self.auth_net_gateway.provider
@@ -569,7 +587,7 @@ class TestTransaction(ModuleTestCase):
             profile.expiry_month, '05'
         )
         self.assertEqual(
-            profile.expiry_year, '2023'
+            profile.expiry_year, expiry_year
         )
         self.assertIsNotNone(profile.authorize_profile_id)
         self.assertEqual(
