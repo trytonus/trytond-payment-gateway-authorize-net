@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 from trytond.pool import Pool
 from .transaction import PaymentGatewayAuthorize, \
-    AddPaymentProfile, AuthorizeNetTransaction, \
-    Party, Address, PaymentProfile
+    AddPaymentProfile, AuthorizeNetTransaction
+from .party import Party, Address, PaymentProfile
 
 
 def register():
