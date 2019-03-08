@@ -229,6 +229,8 @@ class PaymentProfile:
             customer_info.get('lastName', '')
         )
         expiry_month, expiry_year = card_info['expDate'].split('/')
+        if len(expiry_year) == 2:
+            expiry_year = '20' + expiry_year
 
         profile, = PaymentProfile.create([{
             'name': name or party.name,
