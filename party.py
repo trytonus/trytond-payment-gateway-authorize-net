@@ -47,7 +47,7 @@ class Party:
                 'description': self.name,
                 'email': self.email,
             })
-        except AuthorizeInvalidError, exc:
+        except (AuthorizeInvalidError, AuthorizeResponseError) as exc:
             self.raise_user_error(unicode(exc))
 
         return customer.customer_id
