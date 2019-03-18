@@ -76,7 +76,7 @@ class Address:
                     profile_id, self.get_authorize_address()
                 )
                 break
-            except AuthorizeResponseError, exc:
+            except AuthorizeResponseError as exc:
                 if try_count == 0 and (
                         'E00039' in unicode(exc) or
                         'E00043' in unicode(exc)
@@ -85,7 +85,7 @@ class Address:
                     self.delete_authorize_addresses(profile_id)
                     continue
                 self.raise_user_error(unicode(exc))
-            except AuthorizeInvalidError, exc:
+            except AuthorizeInvalidError as exc:
                 self.raise_user_error(unicode(exc))
 
         address_id = address.address_id
@@ -200,9 +200,9 @@ class PaymentProfile:
             credit_card = authorize.CreditCard.create(
                 customer_id, card_data
             )
-        except AuthorizeInvalidError, exc:
+        except AuthorizeInvalidError as exc:
             cls.raise_user_error(unicode(exc))
-        except AuthorizeResponseError, exc:
+        except AuthorizeResponseError as exc:
             if 'E00039' in unicode(exc):
                 # Delete all unused payment profiles on authorize.net
                 customer_details = authorize.Customer.details(customer_id)
