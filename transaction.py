@@ -144,7 +144,7 @@ class AuthorizeNetTransaction:
 
         try:
             result = authorize.Transaction.auth(auth_data)
-        except AuthorizeResponseError, exc:
+        except AuthorizeResponseError as exc:
             self.state = 'failed'
             self.save()
             TransactionLog.serialize_and_create(self, exc.full_response)
@@ -179,7 +179,7 @@ class AuthorizeNetTransaction:
             result = authorize.Transaction.settle(
                 self.provider_reference, self.amount
             )
-        except AuthorizeResponseError, exc:
+        except AuthorizeResponseError as exc:
             self.state = 'failed'
             self.save()
             TransactionLog.serialize_and_create(self, exc.full_response)
@@ -255,7 +255,7 @@ class AuthorizeNetTransaction:
 
         try:
             result = authorize.Transaction.sale(capture_data)
-        except AuthorizeResponseError, exc:
+        except AuthorizeResponseError as exc:
             self.state = 'failed'
             self.save()
             TransactionLog.serialize_and_create(self, exc.full_response)
@@ -324,7 +324,7 @@ class AuthorizeNetTransaction:
         # Try to void the transaction
         try:
             result = authorize.Transaction.void(self.provider_reference)
-        except AuthorizeResponseError, exc:
+        except AuthorizeResponseError as exc:
             TransactionLog.serialize_and_create(self, exc.full_response)
         else:
             self.state = 'cancel'
@@ -354,7 +354,7 @@ class AuthorizeNetTransaction:
                 'last_four': self.last_four_digits,
                 'transaction_id': self.origin.provider_reference,
             })
-        except AuthorizeResponseError, exc:
+        except AuthorizeResponseError as exc:
             self.state = 'failed'
             self.save()
             TransactionLog.serialize_and_create(self, exc.full_response)
@@ -414,9 +414,9 @@ class AddPaymentProfile:
                     }
                 )
                 break
-            except AuthorizeInvalidError, exc:
+            except AuthorizeInvalidError as exc:
                 self.raise_user_error(unicode(exc))
-            except AuthorizeResponseError, exc:
+            except AuthorizeResponseError as exc:
                 if try_count == 0 and 'E00039' in unicode(exc):
                     # Delete all unused payment profiles on authorize.net
                     customer_details = authorize.Customer.details(customer_id)
